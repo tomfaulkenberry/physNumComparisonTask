@@ -1,0 +1,17 @@
+base
+papaja
+tidyverse
+ggplot2
+tibble
+tidyr
+readr
+purrr
+dplyr
+coda
+Matrix
+BayesFactor
+cowplot
+SuppDists
+plyr
+bindrcpp
+polspline

@@ -1,0 +1,536 @@
+---
+title             : "Supplemental Materials for ``A shifted Wald decomposition of the numerical size-congruity effect: Support for a late-interaction account''"
+shorttitle        : "Supplementary material"
+
+author: 
+  - name          : "Thomas J. Faulkenberry"
+    corresponding : yes    # Define only one corresponding author
+    address       : "Department of Psychological Sciences, Box T-0820, Tarleton State University, Stephenville, TX 76401"
+    email         : "faulkenberry@tarleton.edu"
+
+affiliation:
+  - institution   : "Tarleton State University"
+
+bibliography      : ["references.bib"]
+
+figsintext        : yes
+figurelist        : no
+tablelist         : no
+footnotelist      : no
+lineno            : no
+
+lang              : "english"
+class             : "doc"
+header-includes   :
+  - \usepackage{bm}
+output            : papaja::apa6_pdf
+---
+
+```{r start, include = FALSE}
+library(papaja)
+library(tidyverse)
+library(BayesFactor)
+library(cowplot)
+library(polspline)
+source("https://raw.githubusercontent.com/tomfaulkenberry/physNumComparisonTask/master/results/waldFunctions.R")
+
+```
+
+In these supplemental materials, I present details on the Bayesian hypothesis tests performed in the main paper, providing specific definitions and relevant R code. Then for each test, I provide two supplements: (1) a plot of the prior and posterior for effect size $\delta$, giving a visual representation of the Bayes factor computation; and (2) a robustness check, showing the effect of prior choice on the resulting Bayes factor.
+
+# Definitions and R-code
+
+The Bayesian t-tests described in this paper were performed using the `ttestBF` function from the `BayesFactor` package in R (Morey & Rouder, 2012). The `ttestBF` function implements the *JZS Bayes factor* computation for t-tests originally described in Rouder et al. (2009). Recall that the Bayes factor $B_{01}$ represents the factor by which the prior odds for hypothesis $\mathcal{H}_0$ over hypothesis $\mathcal{H}_1$ are updated after observing data $D$. That is,
+
+\[
+\frac{p(\mathcal{H}_0\mid D)}{p(\mathcal{H}_1\mid D)} = B_{01} \times \frac{p(\mathcal{H}_0)}{p(\mathcal{H}_1)}.
+\]
+
+\noindent
+Computationally, Bayes Theorem implies that $B_{01}$ is equal to the ratio of *marginal likelihoods* $M_0/M_1$, where
+
+\[
+M_i = \int_{\bm{\theta}\in \Theta_i} f_i(\bm{\theta}\mid D)\pi_i(\bm{\theta})d\bm{\theta},
+\]
+
+\noindent
+where $i=0,1$, $\Theta_i$ represents the space of parameters $\bm{\theta}$ under hypothesis $\mathcal{H}_i$, $f_i$ denotes the likelihood function hypothesis $\mathcal{H}_i$, given parameters $\bm{\theta}$ and data $D$, and $\pi_i$ represents the prior distribution of parameters $\bm{\theta}$ under hypothesis $\mathcal{H}_i$.  In the case of a single-sample t-test, the likelihood $f_i$ is simply the familiar normal density with parameters $\mu$ and $\sigma$. However, the Bayesian analyst still must choose priors $\pi_i$ for each of these parameters.
+
+Rouder et al. (2009) showed that the computation of the marginal likelihoods $M_i$ (and, by implication, the Bayes factor $B_{01}$) becomes relatively straightforward with a few simple assumptions.  First, instead of placing priors on the mean $\mu$, we can instead place priors on the *effect size* $\delta = \mu/\sigma$.  One benefit of doing so is that the null hypothesis $\mathcal{H}_0$ may be defined as $\delta=0$.  Then, Rouder et al. (2009) recommending placing a Cauchy prior on $\delta$ (following Jeffreys, 1961) and an inverse-chi-square prior $\sigma_{\delta}^2$ (following Zellner and Siow, 1980).  As a result, the formula derived by Rouder et al. (2009) is referred to as the JZS Bayes factor (named so for Jeffreys, Zellner, and Siow).
+
+The JZS Bayes factor provides the user with a simple default Bayesian t-test. However, the Bayes factor is sensitive to the choice of prior, one should take care to be explicit with this choice. With the `ttestBF` function, one may easily choose between three default priors, parameterized as the scale (or width) $r$ of the Cauchy prior on effect size $\delta$.  In this context, setting the prior scale to $r$ means 50% of the effect sizes would be expected to be between $-r$ and $+r$. The user may specify this scale via an `rscale` argument in the function. Three convenient pre-defined scales are:
+
+* "medium", corresponding to $r=\sqrt{2}/2$. 
+* "wide", corresponding to $r=1$
+* "ultrawide", corresponding to $r=\sqrt{2}$
+
+By default, the `ttestBF` function uses the "medium" prior, which is equivalent to starting with a prior belief that effect sizes are distributed as a Cauchy distribution with scale $r=\sqrt{2}/2 \approx 0.707$. However, the choice of prior is subjective, so it is imperative that a complete Bayesian analysis should also include an analysis of the sensitivity of the analysis to prior choice. 
+
+In the following sections, I present the details of each Bayesian t-test that was performed in the original paper. Specifically, I define the appropriate null and alternative hypotheses, followed by a sensitivity analyses that shows how the obtained JZS Bayes factor depends on Cauchy prior scale $r$. 
+
+
+```{r datagrab, cache=TRUE}
+##############
+#DATA SETUP
+##############
+
+# import data
+dataRaw <- read_csv("https://raw.githubusercontent.com/tomfaulkenberry/physNumComparisonTask/master/results/processed.csv")
+
+# basic info
+nSub = length(unique(dataRaw$subject_nr))
+nTrials = dim(dataRaw)[1]
+numErrors = sum(dataRaw$correct==0)
+medianRT = median(dataRaw$response_time)
+MAD = mad(dataRaw$response_time)
+numOutliers = sum(dataRaw$correct==0 | dataRaw$response_time < medianRT-3*MAD | dataRaw$response_time > medianRT+6*MAD) - numErrors
+numRetained = nTrials-numErrors-numOutliers
+  
+data = dataRaw %>%
+   filter(correct==1 & response_time>medianRT-3*MAD & response_time<medianRT+6*MAD) %>%
+   mutate(rt = response_time/1000)
+
+```
+
+```{r tTests, cache=TRUE}
+detach(package:plyr)
+agg = data %>%
+  group_by(subject_nr,congruity) %>%
+  summarize(medRT = median(rt), meanRT=mean(rt), sdRT = sd(rt))
+
+medianT = t.test(agg$medRT[agg$congruity=="incongruent"], agg$medRT[agg$congruity=="congruent"], paired=TRUE, alternative="greater")
+
+medianBayes = ttestBF(agg$medRT[agg$congruity=="incongruent"], agg$medRT[agg$congruity=="congruent"], paired=TRUE, nullInterval=c(0,Inf))
+
+sdT = t.test(agg$sdRT[agg$congruity=="incongruent"], agg$sdRT[agg$congruity=="congruent"], paired=TRUE, alternative="greater")
+
+sdBayes = ttestBF(agg$sdRT[agg$congruity=="incongruent"], agg$sdRT[agg$congruity=="congruent"], paired=TRUE, nullInterval = c(0,Inf))
+
+```
+
+# Bayes factor for median RT
+
+```{r medianPosterior, fig.width=6, fig.height=4, fig.cap="Prior and posterior for effect size. Points on the plot represent the density of the point null in both the prior and posterior.", cache=TRUE}
+
+# plot prior and posterior together
+chains = as.matrix(posterior(medianBayes, index=1, iterations=1e5))
+
+plot(density(chains[,3]), lwd=1.5, 
+     xlim=c(-0.2,2.5), 
+     xlab=expression(paste("Effect size ",delta)),
+     main="",
+     axes=FALSE)
+x=seq(-0.2,2.5,length.out=1000)
+lines(x,ifelse(x>0,2*dcauchy(x,scale=0.707),0), lwd=1.5, lty=3)
+lines(x=c(1.5,1.75), y=c(1.2,1.2),lwd=1.5,lty=3)
+text(x=1.75,y=1.2,pos=4,"Prior")
+lines(x=c(1.5,1.75), y=c(1.05,1.05), lwd=1.5, lty=1)
+text(x=1.75, y=1.05, pos=4, "Posterior")
+points(x=0, y=dlogspline(0, logspline(chains[,3])))
+points(x=0, y=2*dcauchy(0,scale=0.707))
+axis(side=1)
+axis(side=2)
+
+```
+
+```{r medianRobustness, fig.width=6, fig.height=4, fig.cap="Robustness check for Bayes factor in favor of congruity effect on median RTs.", cache=TRUE}
+
+# what is the t-value for the data?
+tVal = medianT$statistic
+
+# how many points in the prior should be explored?
+nPoints = 1000
+
+# what Cauchy rates should be explored?
+cauchyRates = seq(from = 0.01, to = 1.5, length.out = nPoints)
+
+# what effect sizes should be plotted?
+effSize = seq(from = -2, to = 2, length.out = nPoints)
+
+# get the Bayes factor for each prior value
+bayesFactors = sapply(cauchyRates, function(x) 
+  exp(ttest.tstat(t = tVal, n1 = nSub, rscale = x, nullInterval=c(0,Inf))[['bf']]))
+
+plot(cauchyRates, bayesFactors, type = "l", lwd = 2, 
+     ylim = c(0, max(bayesFactors)), xaxt = "n", 
+     xlab = "Cauchy Prior Scale (r)", 
+     ylab = "Bayes Factor")
+axis(1, at = seq(0, 1.5, 0.25))
+
+# specific priors
+# Medium (r=0.707)
+x1=1/sqrt(2)
+y1=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x1, nullInterval=c(0,Inf))[['bf']])
+points(x1,y1,lwd=2)
+lines(x=c(x1,x1),y=c(0,y1),lty=2)
+lines(x=c(0,x1), y=c(y1,y1), lty=2)
+text(x=x1-0.03,y=5000,"Medium", srt=90)
+
+# Wide (r=1)
+x2=1
+y2=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x2, nullInterval=c(0,Inf))[['bf']])
+points(x2,y2,lwd=2)
+lines(x=c(x2,x2),y=c(0,y2),lty=2)
+lines(x=c(0,x2), y=c(y2,y2), lty=2)
+text(x=x2-0.03,y=5000,"Wide", srt=90)
+
+# Ultra-wide (r=1.41)
+x3=sqrt(2)
+y3=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x3, nullInterval=c(0,Inf))[['bf']])
+points(x3,y3,lwd=2)
+lines(x=c(x3,x3),y=c(0,y3),lty=2)
+lines(x=c(0,x3), y=c(y3,y3), lty=2)
+text(x=x3-0.03,y=5000,"Ultrawide", srt=90)
+
+
+```
+
+
+# Bayes factor for standard deviation
+
+
+```{r sdPosterior, fig.width=6, fig.height=4, fig.cap="Prior and posterior for effect size on standard deviation. Points on the plot represent the density of the point null in both the prior and posterior.", cache=TRUE}
+
+# plot prior and posterior together
+chains = as.matrix(posterior(sdBayes, index=1, iterations=1e5))
+
+plot(density(chains[,3]), lwd=1.5, 
+     xlim=c(-0.2,2.5), 
+     xlab=expression(paste("Effect size ",delta)),
+     main="",
+     axes=FALSE)
+x=seq(-0.2,2.5,length.out=1000)
+lines(x,ifelse(x>0,2*dcauchy(x,scale=0.707),0), lwd=1.5, lty=3)
+lines(x=c(1.5,1.75), y=c(1.2,1.2),lwd=1.5,lty=3)
+text(x=1.75,y=1.2,pos=4,"Prior")
+lines(x=c(1.5,1.75), y=c(1.05,1.05), lwd=1.5, lty=1)
+text(x=1.75, y=1.05, pos=4, "Posterior")
+points(x=0, y=dlogspline(0, logspline(chains[,3])))
+points(x=0, y=2*dcauchy(0,scale=0.707))
+axis(side=1)
+axis(side=2)
+
+```
+
+
+```{r sdRobustness, fig.width=6, fig.height=4, fig.cap="Robustness check for Bayes factor in favor of congruity effect on standard deviations.", cache=TRUE}
+
+# what is the t-value for the data?
+tVal = sdT$statistic
+
+# how many points in the prior should be explored?
+nPoints = 1000
+
+# what Cauchy rates should be explored?
+cauchyRates = seq(from = 0.01, to = 1.5, length.out = nPoints)
+
+# get the Bayes factor for each prior value
+bayesFactors = sapply(cauchyRates, function(x) 
+  exp(ttest.tstat(t = tVal, n1 = nSub, rscale = x, nullInterval=c(0,Inf))[['bf']]))
+
+plot(cauchyRates, bayesFactors, type = "l", lwd = 2, 
+     ylim = c(0, max(bayesFactors)), xaxt = "n", 
+     xlab = "Cauchy Prior Scale (r)", 
+     ylab = "Bayes Factor")
+axis(1, at = seq(0, 1.5, 0.25))
+
+# specific priors
+# Medium (r=0.707)
+x1=1/sqrt(2)
+y1=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x1, nullInterval=c(0,Inf))[['bf']])
+points(x1,y1,lwd=2)
+lines(x=c(x1,x1),y=c(0,y1),lty=2)
+lines(x=c(0,x1), y=c(y1,y1), lty=2)
+text(x=x1-0.03,y=750,"Medium", srt=90)
+
+# Wide (r=1)
+x2=1
+y2=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x2, nullInterval=c(0,Inf))[['bf']])
+points(x2,y2,lwd=2)
+lines(x=c(x2,x2),y=c(0,y2),lty=2)
+lines(x=c(0,x2), y=c(y2,y2), lty=2)
+text(x=x2-0.03,y=750,"Wide", srt=90)
+
+# Ultra-wide (r=1.41)
+x3=sqrt(2)
+y3=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x3, nullInterval=c(0,Inf))[['bf']])
+points(x3,y3,lwd=2)
+lines(x=c(x3,x3),y=c(0,y3),lty=2)
+lines(x=c(0,x3), y=c(y3,y3), lty=2)
+text(x=x3-0.03,y=750,"Ultrawide", srt=90)
+
+
+```
+
+
+```{r waldModel, cache=TRUE}
+
+fit = swapply(dat=data, obsvar="rt", facs = c("congruity", "subject_nr")) 
+
+params = fit$vars
+params$subject_nr = as.factor(params$subject_nr)
+params$congruity = factor(params$congruity, labels=c("congruent","incongruent"))
+
+
+gammaCong = params$gamma[params$congruity=="congruent"]
+gammaIncong = params$gamma[params$congruity=="incongruent"]
+gammaT = t.test(params$gamma[params$congruity=="incongruent"], params$gamma[params$congruity=="congruent"], paired=TRUE, alternative="less")
+gammaBF = ttestBF(gammaIncong,gammaCong, paired=TRUE, nullInterval=c(-Inf,0))
+
+alphaCong = params$alpha[params$congruity=="congruent"]
+alphaIncong = params$alpha[params$congruity=="incongruent"]
+alphaT = t.test(params$alpha[params$congruity=="incongruent"], params$alpha[params$congruity=="congruent"], paired=TRUE, alternative="greater")
+alphaBF = ttestBF(alphaIncong,alphaCong, paired=TRUE, nullInterval = c(0,Inf))
+
+thetaCong = params$theta[params$congruity=="congruent"]
+thetaIncong = params$theta[params$congruity=="incongruent"]
+thetaT = t.test(params$theta[params$congruity=="incongruent"], params$theta[params$congruity=="congruent"], paired=TRUE, alternative="greater")
+thetaBF = ttestBF(thetaIncong, thetaCong, paired=TRUE, nullInterval = c(0,Inf))
+```
+
+
+
+# Bayes factor for drift rate $\gamma$
+
+
+```{r gammaPosterior, fig.width=6, fig.height=4, fig.cap="Prior and posterior for effect size on drift rate. Points on the plot represent the density of the point null in both the prior and posterior.", cache=TRUE}
+
+# plot prior and posterior together
+chains = as.matrix(posterior(gammaBF, index=1, iterations=1e5))
+
+plot(density(chains[,3]), lwd=1.5, 
+     xlim=c(-2.5,0.2), 
+     xlab=expression(paste("Effect size ",delta)),
+     main="",
+     axes=FALSE)
+x=seq(-2.5,0.2,length.out=1000)
+lines(x,ifelse(x<0,2*dcauchy(x,scale=0.707),0), lwd=1.5, lty=3)
+lines(x=c(-2.3,-2.15), y=c(1.2,1.2),lwd=1.5,lty=3)
+text(x=-2.15,y=1.2,pos=4,"Prior")
+lines(x=c(-2.3,-2.15), y=c(1.05,1.05), lwd=1.5, lty=1)
+text(x=-2.15, y=1.05, pos=4, "Posterior")
+points(x=0, y=dlogspline(0, logspline(chains[,3])))
+points(x=0, y=2*dcauchy(0,scale=0.707))
+axis(side=1)
+axis(side=2)
+
+```
+
+```{r gammaRobustness, fig.width=6, fig.height=4, fig.cap="Robustness check for Bayes factor in favor of congruity effect on drift rate.", cache=TRUE}
+
+# what is the t-value for the data?
+tVal = gammaT$statistic
+
+# how many points in the prior should be explored?
+nPoints = 1000
+
+# what Cauchy rates should be explored?
+cauchyRates = seq(from = 0.01, to = 1.5, length.out = nPoints)
+
+# get the Bayes factor for each prior value
+bayesFactors = sapply(cauchyRates, function(x) 
+  exp(ttest.tstat(t = tVal, n1 = nSub, rscale = x, nullInterval=c(-Inf,0))[['bf']]))
+
+plot(cauchyRates, bayesFactors, type = "l", lwd = 2, 
+     ylim = c(0, max(bayesFactors)), xaxt = "n", 
+     xlab = "Cauchy Prior Scale (r)", 
+     ylab = "Bayes Factor")
+axis(1, at = seq(0, 1.5, 0.25))
+
+# specific priors
+# Medium (r=0.707)
+x1=1/sqrt(2)
+y1=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x1, nullInterval=c(-Inf,0))[['bf']])
+points(x1,y1,lwd=2)
+lines(x=c(x1,x1),y=c(0,y1),lty=2)
+lines(x=c(0,x1), y=c(y1,y1), lty=2)
+text(x=x1-0.03,y=500,"Medium", srt=90)
+
+# Wide (r=1)
+x2=1
+y2=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x2, nullInterval=c(-Inf,0))[['bf']])
+points(x2,y2,lwd=2)
+lines(x=c(x2,x2),y=c(0,y2),lty=2)
+lines(x=c(0,x2), y=c(y2,y2), lty=2)
+text(x=x2-0.03,y=500,"Wide", srt=90)
+
+# Ultra-wide (r=1.41)
+x3=sqrt(2)
+y3=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x3, nullInterval=c(-Inf,0))[['bf']])
+points(x3,y3,lwd=2)
+lines(x=c(x3,x3),y=c(0,y3),lty=2)
+lines(x=c(0,x3), y=c(y3,y3), lty=2)
+text(x=x3-0.03,y=500,"Ultrawide", srt=90)
+
+
+```
+
+
+# Bayes factor for response threshold $\alpha$
+
+
+```{r alphaPosterior, fig.width=6, fig.height=4, fig.cap="Prior and posterior for effect size on response threshold. Points on the plot represent the density of the point null in both the prior and posterior.", cache=TRUE}
+
+# plot prior and posterior together
+chains = as.matrix(posterior(alphaBF, index=1, iterations=1e5))
+
+plot(density(chains[,3]), lwd=1.5, 
+     xlim=c(-0.2,2.5), 
+     xlab=expression(paste("Effect size ",delta)),
+     main="",
+     axes=FALSE)
+x=seq(-0.2,2.5,length.out=1000)
+lines(x,ifelse(x>0,2*dcauchy(x,scale=0.707),0), lwd=1.5, lty=3)
+lines(x=c(1.5,1.75), y=c(1.2,1.2),lwd=1.5,lty=3)
+text(x=1.75,y=1.2,pos=4,"Prior")
+lines(x=c(1.5,1.75), y=c(1.05,1.05), lwd=1.5, lty=1)
+text(x=1.75, y=1.05, pos=4, "Posterior")
+points(x=0, y=dlogspline(0, logspline(chains[,3])))
+points(x=0, y=2*dcauchy(0,scale=0.707))
+axis(side=1)
+axis(side=2)
+
+```
+
+```{r alphaRobustness, fig.width=6, fig.height=4, fig.cap="Robustness check for Bayes factor in favor of congruity effect on response threshold.", cache=TRUE}
+
+# what is the t-value for the data?
+tVal = alphaT$statistic
+
+# how many points in the prior should be explored?
+nPoints = 1000
+
+# what Cauchy rates should be explored?
+cauchyRates = seq(from = 0.01, to = 1.5, length.out = nPoints)
+
+# get the Bayes factor for each prior value
+bayesFactors = sapply(cauchyRates, function(x) 
+  exp(ttest.tstat(t = tVal, n1 = nSub, rscale = x, nullInterval=c(0,Inf))[['bf']]))
+
+plot(cauchyRates, bayesFactors, type = "l", lwd = 2, 
+     ylim = c(0, max(bayesFactors)), xaxt = "n", 
+     xlab = "Cauchy Prior Scale (r)", 
+     ylab = "Bayes Factor")
+axis(1, at = seq(0, 1.5, 0.25))
+
+# specific priors
+# Medium (r=0.707)
+x1=1/sqrt(2)
+y1=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x1, nullInterval=c(0,Inf))[['bf']])
+points(x1,y1,lwd=2)
+lines(x=c(x1,x1),y=c(0,y1),lty=2)
+lines(x=c(0,x1), y=c(y1,y1), lty=2)
+text(x=x1-0.03,y=5,"Medium", srt=90)
+
+# Wide (r=1)
+x2=1
+y2=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x2, nullInterval=c(0,Inf))[['bf']])
+points(x2,y2,lwd=2)
+lines(x=c(x2,x2),y=c(0,y2),lty=2)
+lines(x=c(0,x2), y=c(y2,y2), lty=2)
+text(x=x2-0.03,y=5,"Wide", srt=90)
+
+# Ultra-wide (r=1.41)
+x3=sqrt(2)
+y3=exp(ttest.tstat(t=tVal, n1=nSub, rscale=x3, nullInterval=c(0,Inf))[['bf']])
+points(x3,y3,lwd=2)
+lines(x=c(x3,x3),y=c(0,y3),lty=2)
+lines(x=c(0,x3), y=c(y3,y3), lty=2)
+text(x=x3-0.03,y=5,"Ultrawide", srt=90)
+
+
+```
+
+
+# Bayes factor for nondecision time $\theta$
+
+
+```{r thetaPosterior, fig.width=6, fig.height=4, fig.cap="Prior and posterior for effect size on nondecision time. Points on the plot represent the density of the point null in both the prior and posterior.", cache=TRUE}
+
+# plot prior and posterior together
+chains = as.matrix(posterior(thetaBF, index=1, iterations=1e5))
+fit = density(chains[,3])
+plot(fit, lwd=1.5, 
+     xlim=c(-2,2), 
+     xlab=expression(paste("Effect size ",delta)),
+     main="",
+     axes=FALSE)
+x=seq(-2,2,length.out=1000)
+lines(x,ifelse(x>0,2*dcauchy(x,scale=0.707),0), lwd=1.5, lty=3)
+lines(x=c(1,1.25), y=c(3,3),lwd=1.5,lty=3)
+text(x=1.25,y=3,pos=4,"Prior")
+lines(x=c(1,1.25), y=c(2.5,2.5), lwd=1.5, lty=1)
+text(x=1.25, y=2.5, pos=4, "Posterior")
+points(x=0, y=max(fit$y[abs(fit$x)<0.001]))
+points(x=0, y=2*dcauchy(0,scale=0.707))
+axis(side=1)
+axis(side=2)
+
+```
+
+```{r thetaRobustness, fig.width=6, fig.height=4, fig.cap="Robustness check for Bayes factor in favor of null effect of congruity effect on nondecision time", cache=TRUE}
+
+# what is the t-value for the data?
+tVal = thetaT$statistic
+
+# how many points in the prior should be explored?
+nPoints = 1000
+
+# what Cauchy rates should be explored?
+cauchyRates = seq(from = 0.01, to = 1.5, length.out = nPoints)
+
+# get the Bayes factor for each prior value
+bayesFactors = sapply(cauchyRates, function(x) 
+  1/exp(ttest.tstat(t = tVal, n1 = nSub, rscale = x, nullInterval=c(0,Inf))[['bf']]))
+
+plot(cauchyRates, bayesFactors, type = "l", lwd = 2, 
+     ylim = c(0, max(bayesFactors)), xaxt = "n", 
+     xlab = "Cauchy Prior Scale (r)", 
+     ylab = "Bayes Factor")
+axis(1, at = seq(0, 1.5, 0.25))
+
+# specific priors
+# Medium (r=0.707)
+x1=1/sqrt(2)
+y1=1/exp(ttest.tstat(t=tVal, n1=nSub, rscale=x1, nullInterval=c(0,Inf))[['bf']])
+points(x1,y1,lwd=2)
+lines(x=c(x1,x1),y=c(0,y1),lty=2)
+lines(x=c(0,x1), y=c(y1,y1), lty=2)
+text(x=x1-0.03,y=5,"Medium", srt=90)
+
+# Wide (r=1)
+x2=1
+y2=1/exp(ttest.tstat(t=tVal, n1=nSub, rscale=x2, nullInterval=c(0,Inf))[['bf']])
+points(x2,y2,lwd=2)
+lines(x=c(x2,x2),y=c(0,y2),lty=2)
+lines(x=c(0,x2), y=c(y2,y2), lty=2)
+text(x=x2-0.03,y=5,"Wide", srt=90)
+
+# Ultra-wide (r=1.41)
+x3=sqrt(2)
+y3=1/exp(ttest.tstat(t=tVal, n1=nSub, rscale=x3, nullInterval=c(0,Inf))[['bf']])
+points(x3,y3,lwd=2)
+lines(x=c(x3,x3),y=c(0,y3),lty=2)
+lines(x=c(0,x3), y=c(y3,y3), lty=2)
+text(x=x3-0.03,y=5,"Ultrawide", srt=90)
+
+
+```
+
+TODO
+- fix point null positions in posterior densities.  Probably need to use `logspline` package
+
+
+
+\newpage
+
+# References
+```{r create_r-references}
+r_refs(file = "r-references.bib")
+```
+
+\setlength{\parindent}{-0.5in}
+\setlength{\leftskip}{0.5in}
+
+
+```{r }
