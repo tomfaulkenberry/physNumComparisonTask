@@ -1,7 +1,9 @@
 # physNumComparisonTask
 
-This repository contains the experiment files and data for the paper "A shifted Wald decomposition of the numerical size-congruity effect: Support for a late interaction account", jointly authored with A. Vick and K. Bowman.  
+This repository contains the experiment files, data, and manuscript files for the following papers:
 
-The paper has been accepted for publication at *Polish Psychological Bulletin*; a PDF is available [here](paper/revision/paper.pdf).
+1. "A shifted Wald decomposition of the numerical size-congruity effect: Support for a late interaction account" (with A. Vick and K. Bowman) - https://doi.org/10.24425/119507
+
+2. "Modeling the latent structure of individual differences in the numerical size-congruity effect" (with K. Bowman) - https://psyarxiv.com/4b9rs/
 
 The contents of this repository are licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) license.
