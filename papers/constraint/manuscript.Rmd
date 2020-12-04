@@ -1,0 +1,1258 @@
+---
+title             : "Modeling the latent structure of individual differences in the numerical size-congruity effect"
+shorttitle        : "Individual differences in the size-congruity effect"
+
+author:
+  - name          : "Thomas J. Faulkenberry"
+    corresponding : yes    
+    affiliation   : "1"
+    address       : "Department of Psychological Sciences, Box T-0820, Tarleton State University, Stephenville, TX 76401"
+    email         : "faulkenberry@tarleton.edu"
+  - name          : "Kristen A. Bowman"
+    affiliation   : "1"
+    corresponding : no
+ 
+
+affiliation:
+  - id            : "1"
+    institution   : "Tarleton State University"
+ 
+
+authornote: >
+  This paper was written in R-Markdown with code for data analysis integrated into the text. The RMarkdown file is available for download at https://git.io/vAEE8. This work was supported by a Faculty-Student Research Grant from Tarleton State University awarded to TJF.
+  
+abstract: >
+  When people are asked to choose the physically larger of a pair of numerals, they are often slower when relative physical size is incongruent with numerical magnitude. This size-congruity effect is usually assumed as evidence for automatic activation of numerical magnitude. In this paper, we apply the methods of Haaf and Rouder (2017) to look at the size-congruity effect through the lens of individual differences. Here, we simply ask whether everyone exhibits the effect. We develop a class of hierarchical Bayesian mixed models with varying levels of constraint on the individual size- congruity effects. The models are then compared via Bayes factors, telling us which model best predicts the observed data. We then apply this modeling technique to three data sets. In all three data sets, the winning model was one in which the size-congruity effect was constrained to be positive. This indicates that, at least in a physical comparison task with numerals, everyone exhibits a positive size-congruity effect. We discuss these results in the context of measurement fidelity and theory-building in numerical cognition.
+
+keywords: "size-congruity effect, individual differences, hierarchical Bayesian model, Bayes factors"
+
+
+bibliography      : ["references.bib"]
+
+figsintext        : yes
+figurelist        : no
+tablelist         : no
+footnotelist      : no
+lineno            : no
+
+lang              : "english"
+class             : "doc" # can change this to "man" or "jou" or "doc"
+output            : papaja::apa6_pdf
+header-includes:
+  - \renewcommand{\baselinestretch}{1.2}
+---
+
+```{r start, include = FALSE}
+library(papaja)
+library(msm)
+library(MCMCpack)
+library(BayesFactor)
+library(tidyverse)
+library(gplots)
+library(diagram)
+
+```
+
+The numerical size-congruity effect is a classic phenomenon in numerical cognition in which people are slower to choose the larger of two presented numbers when the numbers are presented in a physical size that is incongruent with their relative numerical magnitude [@henik1982]. For example, consider the stimuli in Figure \ref{fig:sceFigure}. Compared to congruent trials, where the physically larger digit is also numerically larger (e.g., left panel of Figure \ref{fig:sceFigure}), people are slower to choose the physically larger digit on incongruent trials, where the physically larger digit is numerically smaller (e.g., right panel of Figure \ref{fig:sceFigure}). This simple phenomenon has been well studied in the fields of decision making and numerical cognition [e.g., @pavio1975;@henik1982;@schwarzHeinze1998;@santens2011;@faulkenberryShaki2016].
+
+```{r sceFigure, fig.height=4, fig.width=8, fig.cap="Example stimuli in a physical size comparison task. The left panel depicts a congruent trial, where the physically larger digit (8) is also the numerically larger digit.  The right panel depicts an incongruent trial, where the physically larger digit (2) is the numerically smaller one.", cache=TRUE}
+
+par(mfrow=c(1,2))
+
+plot(x=-10,y=-10, xlim=c(0,1), ylim=c(0,1),
+     xaxt="n", yaxt="n", bty="n",
+     xlab="", ylab="", main="Congruent", cex.main=1.3)
+lines(x=c(0,0), y=c(0,1), lwd=3)
+lines(x=c(0,1), y=c(1,1), lwd=3)
+lines(x=c(1,1), y=c(1,0), lwd=3)
+lines(x=c(1,0), y=c(0,0), lwd=3)
+rect(xleft=0, xright=1, ybottom=0, ytop=1, col="gray")
+text(x=0.33,y=0.4, "2", cex=2, pos=3)
+text(x=0.66,y=0.4, "8", cex=4, pos=3)
+
+
+plot(x=-10,y=-10, xlim=c(0,1), ylim=c(0,1),
+     xaxt="n", yaxt="n", bty="n",
+     xlab="", ylab="", main="Incongruent", cex.main=1.3)
+lines(x=c(0,0), y=c(0,1), lwd=3)
+lines(x=c(0,1), y=c(1,1), lwd=3)
+lines(x=c(1,1), y=c(1,0), lwd=3)
+lines(x=c(1,0), y=c(0,0), lwd=3)
+rect(xleft=0, xright=1, ybottom=0, ytop=1, col="gray")
+text(x=0.33,y=0.4, "2", cex=4, pos=3)
+text(x=0.66,y=0.4, "8", cex=2, pos=3)
+```
+
+The size-congruity effect is remarkable because it shouldn't have to occur. The task can be completed by simply monitoring the visual template and choosing the symbol which displaces the most visual area on the screen. If this is what people did, then there would be no interference from numerical magnitude on incongruent trials, and thus no size-congruity effect. The presence of the effect, then, implies that we are somehow unable to suppress this interference. As such, the size-congruity effect is often taken as an index for *automatic* processing of numerical magnitude in symbolic tasks. Because of this, individual variation in the effect is often used as a tool to index various abilities in numerical cognition [@ashkenazi2009;@bugden2011]. Our goal in the present study is to develop and test models of various structures on these individual differences. 
+
+Specifically, our aim is to model constraint on individual differences in the size congruity effect. We will argue throughout the paper that this is an important aim, but we think it is easy to demonstrate the need for such work with a quick "thought experiment". In a typical experiment, we usually take a sample mean as a central estimate of a population parameter. For context, let us consider an observed effect size (i.e., Cohen's $d$) as an index of the aggregate size-congruity effect obtained from a sample. We use this sample estimate $d$ to predict the population-level "true" effect $\delta$. Of course, this estimate comes with uncertainty -- what exactly is the structure of true effects $\delta$? Figure \ref{fig:samplingDistributions} displays two possibilities. In the leftmost column, the distribution of true effects is normal, centered on some positive value of $\delta$. In this model, most individuals' true effect $\delta$ will be close to this center ($\delta \approx 0.6$ in the figure), but some will be larger, and some will be smaller. Importantly, some will be negative. In the rightmost column, the distribution of true effects is a *truncated* normal distribution, centered on the same positive value of $\delta$ as the previous model. In this model, we will still see variation in individuals' true effect $\delta$, but the key difference is that *none* of the true effects will be negative. That is, this model *constrains* individuals' size-congruity effects to be positive.
+
+So which model is correct? Unfortunately, we cannot determine this from an aggregate observed effect. To see why, consider the sampling distributions from each of these hypothetical populations, displayed in the bottom row of Figure \ref{fig:samplingDistributions}. By the central limit theorem, both distributions of sampled effect sizes will be approximately normal and centered on the same value (e.g., $d = 0.6$). Unfortunately, when we carry out an experiment, we can only observe this sampled effect -- the structure of the underlying true effects $\delta$ can only be inferred. Here, the mapping from population to sample is a 2-to-1 function -- both structures map to the same distribution of sampled effect sizes. Hence, the inverse mapping is not well-defined -- given an observed effect size $d$, we have no way to pinpoint the nature of the underlying population of true effects $\delta$.  
+
+```{r samplingDistributions, fig.width=6, fig.height=6, fig.cap="Possible scenarios for population-level size-congruity effects and their respective sampling distributions.", cache=TRUE}
+
+x = seq(from=-1.5, to=2.5, length.out = 200)
+
+effect =0.6
+
+# normal population and sampling distribution (based on n=16)
+y.norm = dnorm(x, mean=effect, sd=0.5)
+y.m.norm = dnorm(x, mean=effect, sd=0.5/sqrt(16))
+
+# truncated normal density
+y.t.norm = dtnorm(x, mean=effect, sd=0.5, lower=0)
+
+par(mfrow=c(2,2), mar=c(4,4.5,1,1), mgp=c(2,0.7,0))
+
+plot(x, y.norm, type="l", 
+     frame.plot=FALSE,
+     ylab = "Density",
+     xlab = expression(paste("True effect ", delta)),
+     yaxt = 'n',
+     main = "",
+     ylim = c(0, 2),
+     lwd=2
+)
+
+axis(side=2, at=seq(0,2,1), las=2)
+abline(v=0, col="gray80")
+
+
+plot(x, y.t.norm, type="l", 
+     frame.plot=FALSE,
+     ylab = "",
+     xlab = expression(paste("True effect ", delta)),
+     yaxt = 'n',
+     main = "",
+     ylim = c(0, 2),
+     lwd=2
+)
+
+#axis(side=2, at=seq(0,4,1), las=2)
+abline(v=0, col="gray80")
+
+
+plot(x, y.m.norm, type="l", 
+     frame.plot=FALSE,
+     ylab = "Density",
+     xlab = expression(paste("Sampled effect ", d)),
+     yaxt = 'n',
+     main = "",
+     ylim = c(0, max(y.m.norm)+0.3),
+     lwd=2,
+     lty=2
+)
+
+axis(side=2, at=seq(0,3,1), las=2)
+abline(v=0, col="gray80")
+lines(x=c(effect,effect), y=c(0,max(y.m.norm)), lwd=1.5)
+
+
+plot(x, y.m.norm, type="l", 
+     frame.plot=FALSE,
+     lty=2,
+     ylab = "",
+     xlab = expression(paste("Sampled effect ", d)),
+     yaxt = 'n',
+     main = "",
+     ylim = c(0, max(y.m.norm)+0.3),
+     lwd=2
+)
+
+#axis(side=2, at=seq(0,4,1), las=2)
+abline(v=0, col="gray80")
+lines(x=c(effect,effect), y=c(0,max(y.m.norm)), lwd=1.5)
+
+```
+
+Though this question of structure may seem esoteric at first, it is of great importance for our understanding of the size-congruity effect. If the distribution of true effects $\delta$ is constrained (i.e., the right column of Figure \ref{fig:samplingDistributions}), then the size-congruity effect is obligatory and resistant to strategic control. Simply put, *everybody* exhibits it. In this situation, individual differences in the size-congruity effect are *quantitative* [@haaf2017]; that is, they are all positive and only vary in magnitude. On the other hand, if the distribution of true effects $\delta$ is unconstrained (i.e., the left column of Figure \ref{fig:samplingDistributions}), then the size-congruity effect is more complex than originally thought and malleable (perhaps by many different possible mechanisms). Individual differences in this case are *qualitative*; that is, some people exhibit positive effects, whereas others exhibit negative effects.  
+
+Uncovering this latent structure of individual differences is not a trivial problem. Suppose we observe individuals with negative size-congruity effects -- does this suffice to conclude that individual differences in the size-congruity effect are qualitative? Not necessarily. Indeed, the observed negative effect may simply reflect sampling noise. The problem is even more difficult since there are at least two levels of sampling that occur here -- at one level, we consider an individual as a random draw from the population of true effects, and at another level, the observed individual's aggregate effect size comes from a random draw of trials centered at that individual's true effect. Fortunately, @haaf2017 provided a methodological innovation that allows us to simultaneously these multiple levels of individual variation. Their approach uses hierarchical Bayesian modeling to propose four different possibilities for how individuals' effect sizes may be constrained. These four proposed models are then compared using Bayesian model comparison, allowing us to index the evidence for each model from our observed data.
+
+In the next section, we will describe these Bayesian mixed models in detail and more fully describe the methods used for model comparison. Then we will apply the model to three data sets from our lab. Two of these data sets have been previously published from our lab, and one is a new data set. Finally, we will answer the primary question of this paper: Are individual differences in the size-congruity effect constrained to be positive? That is, does everyone exhibit the size-congruity effect?  The answer turns out to be "yes".
+
+# Bayesian mixed models
+
+We now describe our implementation of the Bayesian mixed model approach developed by @haaf2017. Before going into detail, the main aim of this approach is to build a (hypothetical) generative process for *each* observed response time (i.e., no aggregation of trials at the individual or group level). Each response time is assumed to be built from four components: (1) a grand mean; (2) a subject-specific adjustment to the grand mean (that is, a random intercept); (3) an subject-specific effect term; and (4) a noise term. The hierarchical model is then built by assuming each of these variable components (excluding the grand mean) is randomly drawn from some probability distribution which needs to be described. Later, we will pay specific attention to the distribution that generates each subject's effect term -- it is this distribution on which we instantiate our models of individual difference structure.
+
+Let $Y_{ijk}$ denote the response time (in milliseconds) for the $k^{\text{th}}$ replicate of the $i^{\text{th}}$ subject in the $j^{\text{th}}$ experimental condition ($j=1,2$). We place a random effects linear model on the vector of response times $Y_{ijk}$:
+\[
+Y_{ijk} \sim \text{Normal}(\mu + \alpha_i + x_j\cdot \delta_i, \sigma^2).
+\]
+Here, $\mu$ denotes the grand mean intercept and $\alpha_i$ represents the specific intercept adjustment for subject $i$. The term $x_j$ is a binary variable coding the congruity condition of each trial in our experimental tasks; for congruent trials ($j=1$), we set $x_1=0$, and for incongruent trials ($j=2$), we set $x_2=1$. Under this specification, $\delta_i$ represents the size-congruity effect for subject $i$. Finally, $\sigma^2$ represents the latent sampling variance of the observed response times.
+
+The critical mechanism of this modeling approach is that we need to propose a structure for the distribution from which each subject's size-congruity effect $\delta_i$ is randomly drawn. Our question about the latent structure of individual differences in the size-congruity effect then becomes one of *model selection* -- which of these possible structure models best predicts our observed data? We define four possible generative models for these $\delta_i$, each of which instantiate four possible theoretical positions about the distribution of size-congruity effects.
+
+## The unconstrained model
+The unconstrained model, denoted $\mathcal{M}_u$, places no constraint on the individual size-congruity effects $\delta_i$. We define this model as
+\[
+\mathcal{M}_u: \delta_i \sim \text{Norma}(\nu, \eta^2),
+\]
+where $\nu$ and $\eta^2$ represent the mean and variance, respectively, of the distribution of individual size-congruity effects $\delta_i$. The values of $\nu$ and $\eta^2$ will be estimated from the observed data. In this model, we allow subjects' size-congruity effects to vary among all possible values (positive or negative), so we use this model to capture the framework of *qualitative* individual differences.
+
+## The positive-effects model
+The positive-effects model places constraint on the distribution of size-congruity effects by assuming that all individual effects $\delta_i$ are positive. That is,
+\[
+\mathcal{M}_+:\delta_i \sim \text{Normal}_+(\nu,\eta^2),
+\]
+where $\text{Normal}_+$ denotes a truncated normal distribution with lower bound 0 (i.e., upper right plot in Figure \ref{fig:samplingDistributions}). This model assumes that there is variation in subjects' individual size-congruity effects, but since all $\delta_i>0$, these effects are assumed to be in the same direction. As such, this model captures the framework of *quantitative* individual differences.
+
+## The common-effect model
+The common-effect model places even more constraint on the distribution of size-congruity effects, as it specifically assumes that each individual has the *same* effect. That is,
+\[
+\mathcal{M}_1:\delta_i = \nu,
+\]
+and thus any observed variation in the observed size-congruity effects would be due purely to sampling noise. We use this model for the same reason as @haaf2017. While we think that it is highly unlikely that all individuals have the same size-congruity effect $\delta_i$, it is important to propose such a model in order to benchmark our claim of individual differences. For example, if the common-effect model ended up being the best predictor of our observed data, we would need to question the efficiency of our experimental design as a test to elicit individual differences in the size-congruity effect.
+
+## The null model
+Finally, the null model is the most constrained of the four, as it specifies that each subject's size-congruity effect is zero:
+\[
+\mathcal{M}_0:\delta_i = 0.
+\]
+In this model, any observed variation in the observed response times would be due completely to sampling noise. Like the common-effect model, the null model also serves as a critical index of efficiency for our experimental design. Indeed, if the null model is the best predictor of our observed data, then we really need to question the efficiency of our experimental design to capture size-congruity effects of any sort.
+
+## Prior specifications
+As our modeling is done within a Bayesian framework, we need to specify priors on the parameters in the model. Largely, we follow the recommendations of @haaf2017 to set these priors, but the parameters that vary across our models (i.e., $\delta_i, \nu, \eta^2$) deserve special attention. We use the $g$-prior approach [@zellner1986;@rouder2012], which re-encodes these parameters in terms of *effect size*. To see how this works, consider the collection of individual effect parameters $\delta_i$. We define $g_{\delta} = \eta^2/\sigma^2$, giving us a hyperparamter that casts the variability of $\delta_i$ in terms of the ratio of signal to noise -- that is, true variability $\eta^2$ relative to sampling variability $\sigma^2$. This allows us to re-write our unconstrained model as 
+\[
+\mathcal{M}_u:\delta_i \sim \text{Normal}(\nu, g_{\delta}\sigma^2).
+\]
+Similarly, we may scale the mean size-congruity effect $\nu$ in terms of sampling variability and get a new hyperparameter $g_{\nu}$. Since we've introduced new (hyper)parameters into our model, we must place priors on them as well. The default method [@zellner1986] is to specify these priors as $\text{Inverse-}chi^2$ distributions with one degree of freedom and scale $r^2$.
+
+Though the $g$-prior setup may appear complicated at first, it is actually quite convenient for us. By re-casting these critical parameters in terms of sampling variability $\sigma^2$, we convert the problem of specifying priors on $\delta_i$, $\nu$, and $\eta^2$ (which we think is generally difficult to do in any systematic manner) into one where we need only specify the expected variability of our size-congruity effects relative to the expected overall variability of the obsered response times. In general, we believe $\sigma=300$ milliseconds is a reasonable prior expectation for the variability of response times in these size-congruity tasks [see also @luce1986].
+
+So, after this setup, how do we actually set our priors? Let us first consider $g_{\nu}$, the $g$-prior on the mean size-congruity effect. With the $g$-prior setup, we assume that $\nu \sim \text{Normal}(0, g_{\nu}\sigma^2)$, where $g_{\nu} \sim \text{Inverse-}\chi^2(r_{\nu}^2)$. The scale parameter $r_{\nu}$ should reflect our prior belief about the relative magnitude of size-congruity effects in numerical cognition. We think it is reasonable to expect such effects to be, on average, around 50 milliseconds, which is 1/6 of our expected overall trial-by-trial variability ($\sigma = 300$ milliseconds). Thus, we set $r_{\nu}=1/6$.
+
+Second, we consider $g_{\delta}$. As we described above, this parameter specifies the *a priori* variability of individual size-congruity effects around the mean size-congruity effect. With the $g$-prior setup, we assume that $g_{\delta} \sim \text{Inverse-}\chi^2(r_{\delta}^2)$. We need to set the scale parameter $r_{\delta}$ -- but, we have less guidance here. After all, estimating the variability of individual differences in the size-congruity effect is the point of this paper! However, like @haaf2017, we believe this variability should (1) be on the same scale as the expected effect, and (2) should be no larger than the expected effect. So, we are comfortable in specifying this variability to be about 30 milliseconds, which is 1/10 of $\sigma=300$ millseconds. For this reason, we set $r_{\delta}=1/10$.
+
+## Model comparison
+
+Since our goal is to capture the latent structure of individual differences in the size-congruity effect, our problem is first and foremost one of *model comparison*. That is, we ask which of the four competing models defined above is the most adequate as a predictor of our observed data? To answer this question, we use *Bayes factors* [@jeffreys1961;@kass1995]. Bayes factors index the relative predictive adequacy of two models by comparing the marginal likelihood of observed data under one model to another [@faulkenberry2020]. For example, a Bayes factor of 10 indicates that the observed data are 10 times more likely under one model compared to another. Techniques for computing Bayes factors among three of the four models above ($\mathcal{M}_u$, $\mathcal{M}_1$, $\mathcal{M}_0$) were previously developed by @rouder2012 and are implemented in the BayesFactor [@BayesFactor] package in R [@R]. The Bayes factor between the constrained positive effects model $\mathcal{M}_+$ and the unconstrained model $\mathcal{M}_u$ is computed by the *encompassing prior* method [@klugkist2005;@faulkenberry2019encompassing], which is based on counting the number of posterior samples of $\mathcal{M}_u$ which obey the constraint placed by $\mathcal{M}_+$, then comparing this to the number of prior samples which obey the same constraint.
+
+# Description of data sets
+
+```{r loadData, cache=TRUE}
+
+# Data Set 1 - Faulkenberry, Vick, & Bowman (2018)
+data1 = data.frame()
+filestem = "https://raw.githubusercontent.com/tomfaulkenberry/physNumComparisonTask/master/results/data/subject_"
+for (n in 101:123){
+  file = paste(filestem, n, ".csv", sep="")
+  temp = read.csv(file)
+  data1 = rbind(data1,temp)
+}  
+
+# Data Set 2 -- Bowman & Faulkenberry (2020)
+data2 = data.frame()
+filestem = "https://raw.githubusercontent.com/Kbow27/Thesis/master/subject-"
+for (n in 101:153){
+  file = paste(filestem, n, ".csv", sep="")
+  temp = read.csv(file)
+  data2 = rbind(data2, temp)
+}
+
+# Data Set 3 -- unpublished data set
+data3 = data.frame()
+filestem = "https://raw.githubusercontent.com/tomfaulkenberry/physNumComparisonTask/master/results/dataset3/subject-"
+for (n in 1:35){
+  file = paste(filestem, n, ".csv", sep="")
+  temp = read.csv(file)
+  temp$subject_nr = n
+  data3 = rbind(data3,temp)
+}  
+
+N1 = length(unique(data1$subject_nr))
+N2 = length(unique(data2$subject_nr))
+N3 = length(unique(data3$subject_nr))
+
+```
+
+We used the modeling approach described above to analyze three data sets from our lab. Two of the data sets (Data Sets 1 and 2, respectively) have already been reported in the literature [@faulkenberry2018wald;@bowman2020]. Data Set 3 is an unpublished data set that has not previously been reported. With a few exceptions (noted below), all three data sets used the same experimental task (a physical comparison task), which we now describe in detail.
+
+## Participants
+For all three data sets, participants were undergraduate psychology students who participated in exchange for partial course credit. Data Set 1 was generated by `r N1` subjects, Data Set 2 was generated by `r N2` subjects, and Data Set 3 was generated by `r N3` subjects. 
+
+## Method and design
+The task was implemented via the OpenSesame software package [@opensesame]. At the beginning of the task, subjects were told that they would be presented with pairs of numbers, with each number being displayed in a different font size.  Furthermore, they were asked to quickly and accurately choose (via a keypress) the physically larger digit, pressing the "A" key if the number on the left was larger, and pressing the "L" key if the number on the right was larger. The number pairs were constructed from the single-digit Arabic numerals 2, 3, 4, 5, 6, 7, and 8. Pairs were chosen in order to balance the numerical distance between numerals [this is necessary because numerical distance modulates the magnitude of the size-congruity effect, @faulkenberryShaki2016]. Ignoring order, there were 12 possible pairs of numbers: 2-3, 3-4, 4-5 (distance 1); 2-4, 3-5, 4-6 (distance 2); 2-5, 3-6, 4-7 (distance 3); 2-6, 3-7, 4-8 (distance 4).  
+
+The size-congruity manipulation was implemented by varying the font size of each digit in the number pair. On each trial, the physically smaller digit was presented in 28 point font, whereas the physically larger digit was presented in 36 point font. This resulted in two different congruity conditions. In *congruent* trials, the numerically larger digit was also physically larger, and in *incongruent* trials, the numerically larger digit was physically smaller. Each pair was also presented in two different left-right orders and two different font configurations (smaller/left;larger/right or smaller/right;larger/left). In all, this resulted in $12 \times 2 \times 2 \times 2 = 96$ experimental trials per block. For Data Sets 1 and 2, subjects completed four blocks of these 96 experimental trials (384 trials total). For Data Set 3, participants completed only two blocks, giving 192 trials total. 
+
+Each experimental trial began with a fixation cross displayed for 500 milliseconds, followed immediately by a number pair. One number was positioned 12.5 degrees to the left of the center of the screen, whereas the other number was positioned 12.5 degrees to the right of center (resulting in a visual angle between numbers of approximately 25 degrees). For each trial, the number pair remained on the screen until a response was made. If the response was correct, no feedback was given, and the next trial began immediately. If the response was incorrect, a red "X" was presented in the center of the screen for 1 second, after which the next trial began.
+
+# Results
+
+```{r functions, cache=TRUE}
+# define function to build design matrix and define g-priors
+prep.models = function(sub, cond){
+  I = length(unique(sub))
+  R = length(sub)
+  X.full = matrix(nrow = R, ncol = 2 * I + 2, 0)
+    for (r in 1:R){
+      X.full[r, 1] = 1
+      X.full[r, sub[r] + 1] = 1
+      if (cond[r] == 2) {
+        X.full[r, I + 2] <- 1
+        X.full[r, I + 2 + sub[r]] <- 1
+      }
+    }
+  
+  gMap.full = c(rep(0, I), 1, rep(2, I))
+  
+  X.one = matrix(nrow = R, ncol = I + 2, 0)
+  for (r in 1:R){
+    X.one[r, 1] = 1
+    X.one[r, sub[r] + 1] = 1
+    if (cond[r] == 2) {
+      X.one[r, I + 2] = 1
+    }
+  }
+    
+  gMap.one = c(rep(0, I), 1)
+  
+  X.null = matrix(nrow = R, ncol = I + 1, 0)
+  for(r in 1:R){
+    X.null[r, 1] = 1
+    X.null[r, sub[r] + 1] = 1
+  }
+    
+  gMap.null <- rep(0, I)
+  
+  return(list(X.full = X.full,
+              gMap.full = gMap.full,
+              X.one = X.one,
+              gMap.one = gMap.one,
+              X.null = X.null,
+              gMap.null= gMap.null,
+              R = R,
+              I = I))
+}
+
+
+# define function to compute BFs and sample posteriors
+makeBF = function(y, meanScale, effectScale, prep, keep=1001:10000){
+  bf.full = nWayAOV(y,
+                    prep$X.full,
+                    prep$gMap.full,
+                    rscale = c(1, meanScale, effectScale),
+                    posterior = F,
+                    method = "auto",
+                    iterations = max(keep))
+
+  mcmc.full = nWayAOV(y,
+                    prep$X.full,
+                    prep$gMap.full,
+                    rscale = c(1, meanScale, effectScale),
+                    posterior = T,
+                    method = "auto",
+                    iterations = max(keep))
+
+  bf.one = nWayAOV(y,
+                    prep$X.one,
+                    prep$gMap.one,
+                    rscale = c(1, meanScale),
+                    posterior = F,
+                    method = "auto",
+                    iterations = max(keep))
+  
+  mcmc.one = nWayAOV(y,
+                   prep$X.one,
+                   prep$gMap.one,
+                   rscale = c(1, meanScale),
+                   posterior = T,
+                   method = "auto",
+                   iterations = max(keep))
+  
+  bf.null = nWayAOV(y,
+                    prep$X.null,
+                    prep$gMap.null,
+                    rscale = 1,
+                    posterior = F,
+                    method = "auto",
+                    iterations = max(keep))
+
+  # "encompassing approach"
+  # find number of evidential iterations conditional on data
+  i.delta0 = prep$I + 2
+  i.delta = (prep$I + 3):(2*prep$I + 2)
+    
+  myDelta = mcmc.full[keep, i.delta0] + mcmc.full[keep, i.delta]
+  good = myDelta > 0  # returns TRUE if all samples are positive (i.e., evidential)
+  all.good = apply(good, 1, mean) # returns proportion of positive sample values
+  PostCount = mean(all.good == 1) # returns proportion of "evidential" samples
+  
+  #prior settings
+  R = max(keep)
+  alpha = 0.5
+  beta = 0.5*effectScale^2 # cast invChiSq as invGamma for computational efficiency
+  mu.theta.sd = .5 * meanScale
+  
+  # generate priors 
+  x = matrix(nrow = R, ncol = prep$I)
+  s2 = rinvgamma(R, 0.5, 0.5*effectScale^2) # same as invChiSq with df = 1 and scale = effectScale
+  mu = rcauchy(R, 0, mu.theta.sd) # use Cauchy because it is marginal distribution for effect
+  for (i in 1:prep$I){
+    x[,i] <- rnorm(R, mu, sqrt(s2))
+  }
+
+  # find number of evidential iterations from prior
+  all.greater = function(x) as.integer(mean(x > 0) == 1)
+  PriorCount = mean(apply(x, 1, all.greater))
+
+
+  # compute Bayes factors
+  bf.pu = PostCount/PriorCount
+  bf.u0 = exp(bf.full$bf - bf.null$bf)
+  bf.u1 = exp(bf.full$bf - bf.one$bf)
+  bf.up = 1/bf.pu
+  bf.p1 = bf.pu*bf.u1
+  bf.1p = 1/bf.p1
+  bf.0p = (1/bf.u0)*bf.up
+
+  return(list(bf.pu = bf.pu,
+              bf.u0 = bf.u0,
+              bf.u1 = bf.u1,
+              bf.up = bf.up,
+              bf.p1 = bf.p1,
+              bf.1p = bf.1p, 
+              bf.0p = bf.0p,
+              mcmc.full = mcmc.full,
+              mcmc.one = mcmc.one))
+}
+
+
+# some stuff for the model estimate plots
+make.estimates = function(dat){
+  rts = split(dat$rt, dat$congruity)
+  t = t.test(rts$incongruent, rts$congruent, conf.level = 0.80)
+  return(t$estimate[1]-t$estimate[2])
+}
+
+# a function to easily plot shaded CIs
+polyCI = function(upper, lower, col){
+  len = length(upper)
+  polygon(x = c(rev(1 : len), 1 : len),
+          y = c(rev(lower), upper),
+          col = col,
+          border = NA)
+}
+
+```
+
+We will now present the results of our modeling. For each data set, we break this analysis into three components:
+
+1. *Aggregate size-congruity effect*: to test for an aggregate size-congruity effect, we performed a Bayesian paired-samples $t$-test [@rouder2009] on the collection of mean response times, collapsed by subject and condition (congruent, incongruent). For each test, we compute a Bayes factor to compare the two models $\mathcal{H}_0:\delta = 0$ and $\mathcal{H}_1:\delta >0$, where $\delta$ represents the population-level mean size-congruity effect. In the event that the data are evidential for $\mathcal{H}_1$ (which we fully expect), we give a 95% central credible interval for the raw effect (in ms).
+
+2. *Model estimates*: using Markov chain Monte Carlo (MCMC) sampling functions from the BayesFactor package, we computed posterior distributions for all parameters in the unconstrained model. These posterior samples were then used to estimate size-congruity effects $\delta_i$ for each subject. Specifically, we computed the mean of the posterior samples as well as central 95% credible intervals for each subject, giving us not only a central estimate of each subject's size-congruity effect, but also an interval containing, with probability 0.95, the true subject-level size-congruity effect $\delta_i$.
+
+3. *Model comparisons and sensitivity analysis*: using the methods described above, we computed Bayes factors among the four different models. We then assess the sensitivity of our model comparisons to our prior specifications (i.e., the *a priori* scale on the mean size-congruity effect $\nu$ and effect variability $\eta^2$) by recomputing the Bayes factors for other reasonable settings of $r_{\nu}$ and $r_{\delta}$.
+
+## Data Set 1
+
+### Aggregate size-congruity effect
+
+```{r agg1, cache=TRUE, message=FALSE}
+dataRaw = data1
+
+collapsed1 = dataRaw %>%
+  filter(correct==1 & response_time > 200 & response_time < 1500) %>%
+  group_by(subject_nr, congruity) %>%
+  summarize(mRT = mean(response_time))
+
+rts1 = with(collapsed1, split(mRT, congruity))
+
+test1 = ttestBF(rts1$incongruent, rts1$congruent, paired=TRUE, nullInterval = c(0,Inf))
+bfAgg1 = exp(test1@bayesFactor$bf[1])
+
+posterior1 = summary(ttestBF(rts1$incongruent, rts1$congruent, paired=TRUE, nullInterval = c(0,Inf), posterior = TRUE, iterations = 1000, progress=FALSE))
+
+```
+
+Subjects in Data Set 1 exhibited a very large aggregate size-congruity effect, with an estimated effect of `r round(posterior1$statistics[1,1], 2)` ms. Mean response times were faster on congruent trials ($M =$ `r round(mean(rts1$congruent))` ms) compared to incongruent trials ($M=$ `r round(mean(rts1$incongruent))` ms), $\text{BF}_{10}=$ `r round(bfAgg1)`, 95% CrI = [`r round(posterior1$quantiles[1,1], 2)` ms, `r round(posterior1$quantiles[1,5], 2)` ms].
+
+### Model estimates
+
+```{r computeBFdata1, cache=TRUE, message=FALSE, warning=FALSE}
+
+nSub = length(unique(dataRaw$subject_nr))
+
+data = dataRaw %>%
+  filter(correct==1 & response_time > 200 & response_time < 1500) %>%
+  mutate(rt=response_time)
+
+sub = as.factor(data$subject_nr)
+levels(sub)=1:length(unique(sub))
+sub = as.numeric(sub)
+cond = numeric(length(sub))
+
+for (i in 1:length(sub)){
+  if (data$congruity[i]=="congruent"){
+    cond[i] <- 1
+  }
+  else {
+    cond[i] <-2
+  }
+}
+
+prep1 = prep.models(sub,cond)
+BF1 = makeBF(y=data$rt, meanScale=1/6, effectScale=1/10, prep1)
+
+```
+
+
+```{r plotModel1, fig.height=4, fig.width=8, fig.cap="Individual size-congruity effect estimates (left column) and Bayes factor model comparisons (right column) for Data Set 1. Posterior means and 95% credible intervals for $\\delta_i$ are represented by blue dots and gray band, respectively. The + symbols represent the observed size-congruity effect for each subject. The red dashed-line represents the estimated mean size-congruity effect \\(\\nu\\). For the model comparisons, the red box denotes the winning model, and Bayes factors are displayed beside each arrow.", cache=TRUE}
+
+# full model
+sub = as.factor(data$subject_nr)
+levels(sub) = 1:nSub
+
+i.delta0 = prep1$I + 2
+i.delta = (prep1$I + 3):(2*prep1$I + 2)
+keep=1001:10000
+
+fullDelta = BF1$mcmc.full[keep, i.delta] + BF1$mcmc.full[keep, i.delta0]
+
+delta_obs1 = as.vector(unlist(by(data, sub, make.estimates)))
+delta_bayes1 = apply(fullDelta, 2, mean)
+lowerCI = apply(fullDelta, 2, quantile, probs=0.025)
+upperCI = apply(fullDelta, 2, quantile, probs=0.975)
+
+delta = matrix(c(delta_obs1, delta_bayes1, lowerCI, upperCI), nrow=prep1$I, ncol=4)
+
+delta_ordered = delta[order(delta[, 2]),]
+
+# build plots side by side
+par(mfrow = c(1,2), mar=c(3,3,1,1), mgp = c(2.2,1,0))
+
+# plot of model estimates
+plot(x = 1: nrow(delta_ordered),
+     y = delta_ordered[, 2],
+     ylim = c(min(delta_ordered[, 3]), max(delta_ordered[, 4])),
+     col = "gray40",
+     ylab = "Raw effect (ms)",
+     xlab = "Subjects",
+     frame.plot = FALSE,
+     axes = FALSE
+)
+
+# shaded 95% credible intervals
+polyCI(upper=delta_ordered[,4], lower=delta_ordered[,3], col="gainsboro" )
+
+# baseline of null effect
+abline(h = 0, col = "gray60", lwd = 1.5)
+
+axis(side = 1, at = c(1, nSub))
+axis(side = 2)
+
+# observed effects
+points(x = 1:nrow(delta_ordered),
+       y = delta_ordered[,1],
+       col="black",
+       pch=3
+)
+
+# estimated effects
+points(x = 1: nrow(delta_ordered),
+       y = delta_ordered[, 2],
+       pch = 19,
+       col = "blue"
+)
+
+# plot estimated effect parameter from common effect model
+
+singleDelta1 = mean(BF1$mcmc.one[keep, prep1$I+2])
+abline(h=singleDelta1, lwd=2, lty=2, col="red")
+
+
+# plot of Bayes factors
+# compute bayes factors, then fill in below
+# for reporting "big" Bayes factors..compute log and report 10^log below in plot
+b1pu = round(BF1$bf.pu,2)      
+b1u1 = round(BF1$bf.u1,2)
+b1u0 = round(BF1$bf.u0,2)
+
+# build vector of Bayes factor labels for plot
+bayesfactors = c(b1pu,
+                 expression(10^8),
+                 expression(10^73)
+                 )
+
+# model names in plot
+names = c(
+  paste("Unconstrained"),
+  paste("Positive-effects"),
+  paste("Common-effect"),
+  paste("Null")
+)
+
+# define colors of plot nodes
+myCol = c("winner" = "red",
+          "regular" = "gray40")
+colors = rep("regular", 4)
+colors[2] = "winner"
+
+
+# define layout of nodes
+pos = matrix(ncol = 2, nrow = length(names))
+pos[,1] = c(0.5, 0.5, 0.25, 0.75)   # x coordinates
+pos[,2] = c(0.5, 0.9, 0.1, 0.1)     # y coordinates
+
+# define edge directions
+connect = matrix(0, nrow = length(names), byrow = F, ncol = length(names))
+connect[1,2] = ''
+connect[3,1] = ''
+connect[4,1] = ''
+
+# define edge colors
+lcol = matrix(0, nrow = length(names), byrow = F, ncol = length(names))
+lcol[1,2] = myCol["regular"]
+lcol[3,1] = myCol["regular"]
+lcol[4,1] = myCol["regular"]
+
+# 
+
+G = plotmat(connect,
+             pos,
+             name = names,
+             curve = 0,
+             box.type="rect",
+             box.size= c(0.25, 0.25, 0.25, 0.1),
+             box.prop= c(0.25, 0.25, 0.25, 0.65),
+             box.lcol = myCol[colors],
+             arr.length = 0.5,
+             arr.lcol = lcol,
+             shadow.size = 1,
+             box.cex = 1.1
+)
+
+x = c(0.59, 0.27, 0.73)
+y = c(0.7, 0.32, 0.32)
+for(i in 1:length(bayesfactors)){
+  text(x = x[i],
+       y = y[i],
+       labels = bayesfactors[i],
+       #labels = techniques[i], # 
+       cex = 1.15,
+       font=2
+  )
+}
+
+```
+
+Individual size-congruity effect estimates from the unconstrained model are displayed in the left column of Figure \ref{fig:plotModel1}. We first notice that the *observed* size-congruity effects for each subject (denoted by black crosses) span from `r round(min(delta_obs1),2)` ms to `r round(max(delta_obs1),2)` ms. Here, observed effects are computed by subtracting each subject's mean response time for congruent trials from the mean response time for incongruent trials. With the exception of one subject, the observed size-congruity effects are all constrained to be positive. Estimates from the hierarchical Bayesian model are displayed as blue dots with shaded 95% credible intervals. These estimates are computed as means of the posterior samples for each $\delta_i$, and the 95% credible intervals are computed as the central 95% of the posterior samples (i.e., ranging between the 2.5% and 97.5% quantiles of the samples). The red dashed line represents an (posterior) estimated mean size-congruity effect of $\nu=$ `r round(singleDelta1)` ms.
+
+As is usual in hierarchical modeling, we see a fair amount of *shrinkage* [or regularization, see @davisStober2018] in our estimates. This refers to the phenomenon where the estimated effects (the blue dots) extend over a smaller range (`r round(min(delta_bayes1),2)` ms to `r round(max(delta_bayes1),2)` ms) than the observed effects (the black crosses; `r round(min(delta_obs1),2)` ms to `r round(max(delta_obs1),2)` ms). This shrinkage reflects how the hierarchical model accounts for sampling variability at all levels, thus providing effect estimates with smaller range after accounting for this noise.
+
+### Model comparison and sensitivity analysis
+
+In the previous section, we saw that all model estimates for the individual size-congruity effects $\delta_i$ were positive. This apparent pattern is supported by our Bayes factor computations (see right column of Figure \ref{fig:plotModel1}). The observed data were `r b1pu` times more likely under the positive-effects model $\mathcal{M}_+$ than under the unconstrained model $\mathcal{M}_u$. If we assume 1-to-1 prior odds for $\mathcal{M}_+$ and $\mathcal{M}_u$, this means that our posterior odds in favor of $\mathcal{M}_+$ have increased to `r b1pu`-to-1, which is equivalent to a posterior probability of $p(\mathcal{M}_+ \mid \text{data})=$ `r round(b1pu/(1+b1pu), 3)`. These models were massively preferred over the common-effect model $\mathcal{M}_1$ and the null model $\mathcal{M}_0$, as $\mathcal{M}_u$ was more likely to have predicted the observed data by factors of $10^8$-to-1 and $10^{73}$-to-1, respectively. In all, these data provide positive evidence for *quantitative* individual differences in the size-congruity effect. That is, everybody exhibits a positive size-congruity effect.
+
+To assess the robustness of this claim, we performed a sensitivity analysis. Here, we recomputed Bayes factors with some other reasonable choices of prior scale on mean size-congruity effect $\nu$ and effect variability $\eta^2$. Specifically, we halved and doubled each of the original prior scales $r_{\nu} = 1/6$ and $r_{\delta} = 1/10$, giving four combinations of prior settings. The resulting Bayes factors are displayed in Table \ref{tab:sens-tab1}.
+
+```{r sensitivity1, cache=TRUE, message=FALSE, warning=FALSE}
+
+BF11 = makeBF(y=data$rt, meanScale=1/12, effectScale=1/20, prep1)
+BF12 = makeBF(y=data$rt, meanScale=1/12, effectScale=1/5, prep1)
+BF13 = makeBF(y=data$rt, meanScale=1/3, effectScale=1/20, prep1)
+BF14 = makeBF(y=data$rt, meanScale=1/3, effectScale=1/5, prep1)
+
+```
+
+```{r sens-tab1, cache=TRUE}
+
+scales.nu = c("$\\frac{1}{6}$ (50 ms)",
+             "$\\frac{1}{12}$ (25 ms)", 
+             "$\\frac{1}{12}$ (25 ms)",
+             "$\\frac{1}{3}$ (100 ms)", 
+             "$\\frac{1}{3}$ (100 ms)")
+
+scales.delta = c("$\\frac{1}{10}$ (30 ms)",
+                 "$\\frac{1}{20}$ (15 ms)",
+                 "$\\frac{1}{5}$ (60 ms)",
+                 "$\\frac{1}{20}$ (15 ms)",
+                 "$\\frac{1}{5}$ (60 ms)")
+
+BFs.1 = data.frame("scales.nu" = scales.nu,
+                  "scales.delta" = scales.delta,
+                  "Null" = c(paste0(round(BF1$bf.0p * 10^(75), 2), "e $-75$"),  
+                             paste0(round(BF11$bf.0p * 10^(74), 2), "e $-74$"), 
+                             paste0(round(BF12$bf.0p * 10^(75), 2), "e $-75$"),
+                             paste0(round(BF13$bf.0p * 10^(74), 2), "e $-74$"), 
+                             paste0(round(BF14$bf.0p * 10^(75), 2), "e $-75$")),
+                  "Common-effect" = c(paste0(round(BF1$bf.1p * 10^9, 2), "e $-9$"), 
+                                      paste0(round(BF11$bf.1p * 10^9, 2), "e $-9$"), 
+                                      paste0(round(BF12$bf.1p * 10^9, 2), "e $-9$"), 
+                                      paste0(round(BF13$bf.1p * 10^8, 2), "e $-8$"), 
+                                      paste0(round(BF14$bf.1p * 10^9, 2), "e $-9$")),
+                  "Positive-effects" = rep("*", 5),
+                  "Unconstrained" = c(BF1$bf.up, BF11$bf.up, BF12$bf.up, BF13$bf.up, BF14$bf.up))
+
+# use this first to see scientific notation, then fix up in the data frame
+# BFs.1 = data.frame("scales.nu" = scales.nu,
+#                   "scales.delta" = scales.delta,
+#                   "Null" = c(BF1$bf.0p, BF11$bf.0p, BF12$bf.0p, BF13$bf.0p, BF14$bf.0p),
+#                   "Common-effect" = c(BF1$bf.1p, BF11$bf.1p, BF12$bf.1p, BF13$bf.1p, BF14$bf.1p),
+#                   "Positive-effects" = rep("*", 5),
+#                   "Unconstrained" = c(BF1$bf.up, BF11$bf.up, BF12$bf.up, BF13$bf.up, BF14$bf.up)
+#                   )
+#BFs.1
+
+colnames(BFs.1) = c("Scale on $\\nu$", "Scale on $\\delta_i$", "Null", "Common-effect", "Positive-effects","Unconstrained")
+
+ apa_table(BFs.1,
+           align = c("l", "l", "c", "c", "c", "c"), 
+           note = "The first row contains the Bayes factors from the original prior settings. The asterisks mark the preferred model for each prior setting, and Bayes factors are computed against this model.", 
+           caption = "Sensitivity of Bayes factors to prior settings for Data Set 1", 
+           escape = F
+) 
+
+```
+
+Across this range of prior scales, we see the same outcome as our original analysis. The positive-effects model $\mathcal{M}_+$ is always preferred over the unconstrained model $\mathcal{M}_u$, and these models are collectively very much preferred over the common-effect and null models. At a minimum, the degree of preference for $\mathcal{M}_+$ over $\mathcal{M}_u$ is `r round(BF13$bf.pu, 2)`-to-1 for $r_{\nu}=1/3$ and $r_{\delta}=1/20$. At its maximum, the odds ratio is `r round(BF12$bf.pu, 2)`-to-1, and the other two prior settings result in Bayes factors that are approximately equal to the original. 
+
+## Data Set 2
+
+### Aggregate size-congruity effect
+
+```{r agg2, cache=TRUE, message=FALSE}
+dataRaw = data2
+
+collapsed2 = dataRaw %>%
+  filter(correct==1 & response_time > 200 & response_time < 1500) %>%
+  group_by(subject_nr, congruity) %>%
+  summarize(mRT = mean(response_time))
+
+rts2 = with(collapsed2, split(mRT, congruity))
+
+test2 = ttestBF(rts2$incongruent, rts2$congruent, paired=TRUE, nullInterval = c(0,Inf))
+bfAgg2 = exp(test2@bayesFactor$bf[1])
+
+posterior2 = summary(ttestBF(rts2$incongruent, rts2$congruent, paired=TRUE, nullInterval = c(0,Inf), posterior = TRUE, iterations = 1000, progress=FALSE))
+
+```
+
+Subjects in Data Set 2 also exhibited a large aggregate size-congruity effect, with an estimated effect of `r round(posterior2$statistics[1,1], 2)` ms. Mean response times were faster on congruent trials ($M =$ `r round(mean(rts2$congruent))` ms) compared to incongruent trials ($M=$ `r round(mean(rts2$incongruent))` ms), $\text{BF}_{10}=$ `r round(bfAgg2)`, 95% CrI = [`r round(posterior2$quantiles[1,1], 2)` ms, `r round(posterior2$quantiles[1,5], 2)` ms].
+
+### Model estimates
+
+```{r computeBFdata2, cache=TRUE, message=FALSE, warning=FALSE}
+dataRaw = data2
+
+nSub = length(unique(dataRaw$subject_nr))
+
+data = dataRaw %>%
+  filter(correct==1 & response_time > 200 & response_time < 1500) %>%
+  mutate(rt=response_time)
+
+sub = as.factor(data$subject_nr)
+levels(sub)=1:length(unique(sub))
+sub = as.numeric(sub)
+cond = numeric(length(sub))
+
+for (i in 1:length(sub)){
+  if (data$congruity[i]=="congruent"){
+    cond[i] <- 1
+  }
+  else {
+    cond[i] <-2
+  }
+}
+
+prep2 = prep.models(sub,cond)
+BF2 = makeBF(y=data$rt, meanScale=1/6, effectScale=1/10, prep2)
+
+```
+
+
+```{r plotModel2, fig.height=4, fig.width=8, fig.cap="Individual size-congruity effect estimates (left column) and Bayes factor model comparisons (right column) for Data Set 2. Posterior means and 95% credible intervals for $\\delta_i$ are represented by blue dots and gray band, respectively. The + symbols represent the observed size-congruity effect for each subject. The red dashed-line represents the estimated mean size-congruity effect \\(\\nu\\). For the model comparisons, the red box denotes the winning model, and Bayes factors are displayed beside each arrow.", cache=TRUE}
+
+# full model
+sub = as.factor(data$subject_nr)
+levels(sub) = 1:nSub
+
+i.delta0 = prep2$I + 2
+i.delta = (prep2$I + 3):(2*prep2$I + 2)
+keep=1001:10000
+
+fullDelta = BF2$mcmc.full[keep, i.delta] + BF2$mcmc.full[keep, i.delta0]
+
+delta_obs2 = as.vector(unlist(by(data, sub, make.estimates)))
+delta_bayes2 = apply(fullDelta, 2, mean)
+lowerCI = apply(fullDelta, 2, quantile, probs=0.025)
+upperCI = apply(fullDelta, 2, quantile, probs=0.975)
+
+delta = matrix(c(delta_obs2, delta_bayes2, lowerCI, upperCI), nrow=prep2$I, ncol=4)
+
+delta_ordered = delta[order(delta[, 2]),]
+
+# build plots side by side
+par(mfrow = c(1,2), mar=c(3,3,1,1), mgp = c(2.2,1,0))
+
+# plot of model estimates
+plot(x = 1: nrow(delta_ordered),
+     y = delta_ordered[, 2],
+     ylim = c(min(delta_ordered[, 3]), max(delta_ordered[, 4])),
+     col = "gray40",
+     ylab = "Raw effect (ms)",
+     xlab = "Subjects",
+     frame.plot = FALSE,
+     axes = FALSE
+)
+
+# shaded 95% credible intervals
+polyCI(upper=delta_ordered[,4], lower=delta_ordered[,3], col="gainsboro" )
+
+# baseline of null effect
+abline(h = 0, col = "gray60", lwd = 1.5)
+
+axis(side = 1, at = c(1, nSub))
+axis(side = 2)
+
+# observed effects
+points(x = 1:nrow(delta_ordered),
+       y = delta_ordered[,1],
+       col="black",
+       pch=3
+)
+
+# estimated effects
+points(x = 1: nrow(delta_ordered),
+       y = delta_ordered[, 2],
+       pch = 19,
+       col = "blue"
+)
+
+# plot estimated effect parameter from common effect model
+
+singleDelta2 = mean(BF2$mcmc.one[keep, prep2$I+2])
+abline(h=singleDelta2, lwd=2, lty=2, col="red")
+
+
+# plot of Bayes factors
+# compute bayes factors, then fill in below
+# for reporting "big" Bayes factors..compute log and report 10^log below in plot
+b2pu = round(BF2$bf.pu,2)      
+b2u1 = round(BF2$bf.u1,2)#; log10(b2u1)
+b2u0 = round(BF2$bf.u0,2)#; log10(b2u0)
+
+# build vector of Bayes factor labels for plot
+bayesfactors = c(b2pu,
+                 expression(10^{11}),
+                 expression(10^{156})
+                 )
+
+# model names in plot
+names = c(
+  paste("Unconstrained"),
+  paste("Positive-effects"),
+  paste("Common-effect"),
+  paste("Null")
+)
+
+# define colors of plot nodes
+myCol = c("winner" = "red",
+          "regular" = "gray40")
+colors = rep("regular", 4)
+colors[2] = "winner"
+
+
+# define layout of nodes
+pos = matrix(ncol = 2, nrow = length(names))
+pos[,1] = c(0.5, 0.5, 0.25, 0.75)   # x coordinates
+pos[,2] = c(0.5, 0.9, 0.1, 0.1)     # y coordinates
+
+# define edge directions
+connect = matrix(0, nrow = length(names), byrow = F, ncol = length(names))
+connect[1,2] = ''
+connect[3,1] = ''
+connect[4,1] = ''
+
+# define edge colors
+lcol = matrix(0, nrow = length(names), byrow = F, ncol = length(names))
+lcol[1,2] = myCol["regular"]
+lcol[3,1] = myCol["regular"]
+lcol[4,1] = myCol["regular"]
+
+# 
+
+G = plotmat(connect,
+             pos,
+             name = names,
+             curve = 0,
+             box.type="rect",
+             box.size= c(0.25, 0.25, 0.25, 0.1),
+             box.prop= c(0.25, 0.25, 0.25, 0.65),
+             box.lcol = myCol[colors],
+             arr.length = 0.5,
+             arr.lcol = lcol,
+             shadow.size = 1,
+             box.cex = 1.1
+)
+
+x = c(0.59, 0.27, 0.73)
+y = c(0.7, 0.32, 0.32)
+for(i in 1:length(bayesfactors)){
+  text(x = x[i],
+       y = y[i],
+       labels = bayesfactors[i],
+       #labels = techniques[i], # 
+       cex = 1.15,
+       font=2
+  )
+}
+
+```
+
+Individual size-congruity effect estimates from the unconstrained model are displayed in the left column of Figure \ref{fig:plotModel2}. The *observed* size-congruity effects for each subject (denoted by black crosses) spanned from `r round(min(delta_obs2),2)` ms to `r round(max(delta_obs2),2)` ms. As in Data Set 1, all but one of the observed size-congruity effects were constrained to be positive. The hierarchical model estimates for $\delta_i$ also followed a similar pattern to Data Set 1 and exhibited similar shrinkage. The estimated effects (the blue dots) extended over a smaller range (`r round(min(delta_bayes2),2)` ms to `r round(max(delta_bayes2),2)` ms) than the observed effects (the black crosses; `r round(min(delta_obs2),2)` ms to `r round(max(delta_obs2),2)` ms). Finally, the posterior estimated mean size-congruity effect was $\nu=$ `r round(singleDelta2)` ms.
+
+### Model comparison and sensitivity analysis
+
+The apparent positive constraint displayed in the model estimated effects $\delta_i$ was confirmed in our model comparison (see right column of Figure \ref{fig:plotModel2}). The observed data were `r b2pu` times more likely under the positive-effects model $\mathcal{M}_+$ than under the unconstrained model $\mathcal{M}_u$. Assuming 1-to-1 prior odds for $\mathcal{M}_+$ and $\mathcal{M}_u$, the observed data increased the posterior odds in favor of $\mathcal{M}_+$ to `r b2pu`-to-1, which is equivalent to a posterior probability of $p(\mathcal{M}_+ \mid \text{data})=$ `r round(b2pu/(1+b2pu), 3)`. Both models accounted for nearly all posterior model probability, as $\mathcal{M}_u$ was more likely to have predicted the observed data over the common-effect model and the null model by factors of $10^{11}$-to-1 and $10^{156}$-to-1, respectively. In all, Data Set 2 provided more positive evidence for *quantitative* individual differences in the size-congruity effect. 
+
+
+```{r sensitivity2, cache=TRUE, message=FALSE, warning=FALSE}
+
+BF21 = makeBF(y=data$rt, meanScale=1/12, effectScale=1/20, prep2)
+BF22 = makeBF(y=data$rt, meanScale=1/12, effectScale=1/5, prep2)
+BF23 = makeBF(y=data$rt, meanScale=1/3, effectScale=1/20, prep2)
+BF24 = makeBF(y=data$rt, meanScale=1/3, effectScale=1/5, prep2)
+
+```
+
+```{r sens-tab2, cache=TRUE}
+
+scales.nu = c("$\\frac{1}{6}$ (50 ms)",
+             "$\\frac{1}{12}$ (25 ms)", 
+             "$\\frac{1}{12}$ (25 ms)",
+             "$\\frac{1}{3}$ (100 ms)", 
+             "$\\frac{1}{3}$ (100 ms)")
+
+scales.delta = c("$\\frac{1}{10}$ (30 ms)",
+                 "$\\frac{1}{20}$ (15 ms)",
+                 "$\\frac{1}{5}$ (60 ms)",
+                 "$\\frac{1}{20}$ (15 ms)",
+                 "$\\frac{1}{5}$ (60 ms)")
+
+# use this first to see scientific notation, then fix up in the data frame
+# BFs.2 = data.frame("scales.nu" = scales.nu,
+#                   "scales.delta" = scales.delta,
+#                   "Null" = c(BF2$bf.0p, BF21$bf.0p, BF22$bf.0p, BF23$bf.0p, BF24$bf.0p),
+#                   "Common-effect" = c(BF2$bf.1p, BF21$bf.1p, BF22$bf.1p, BF23$bf.1p, BF24$bf.1p),
+#                   "Positive-effects" = rep("*", 5),
+#                   "Unconstrained" = c(BF2$bf.up, BF21$bf.up, BF22$bf.up, BF23$bf.up, BF24$bf.up)
+#                   )
+# BFs.2
+
+BFs.2 = data.frame("scales.nu" = scales.nu,
+                 "scales.delta" = scales.delta,
+                 "Null" = c(paste0(round(BF2$bf.0p * 10^(157), 2), "e $-157$"),
+                            paste0(round(BF21$bf.0p * 10^(157), 2), "e $-157$"),
+                            paste0(round(BF22$bf.0p * 10^(157), 2), "e $-157$"),
+                            paste0(round(BF23$bf.0p * 10^(157), 2), "e $-157$"),
+                            paste0(round(BF24$bf.0p * 10^(157), 2), "e $-157$")),
+                 "Common-effect" = c(paste0(round(BF2$bf.1p * 10^(13), 2), "e $-13$"),
+                                     paste0(round(BF21$bf.1p * 10^(13), 2), "e $-13$"),
+                                     paste0(round(BF22$bf.1p * 10^(13), 2), "e $-13$"),
+                                     paste0(round(BF23$bf.1p * 10^(12), 2), "e $-12$"),
+                                     paste0(round(BF24$bf.1p * 10^(13), 2), "e $-13$")),
+                 "Positive-effects" = rep("*", 5),
+                 "Unconstrained" = round(c(BF2$bf.up, BF21$bf.up, BF22$bf.up, BF23$bf.up, BF24$bf.up), 2))
+
+
+colnames(BFs.2) = c("Scale on $\\nu$", "Scale on $\\delta_i$", "Null", "Common-effect", "Positive-effects","Unconstrained")
+apa_table(BFs.2,
+          align = c("l", "l", "c", "c", "c", "c"),
+          note = "The first row contains the Bayes factors from the original prior settings. The asterisks mark the preferred model for each prior setting, and Bayes factors are computed against this model.",
+          caption = "Sensitivity of Bayes factors to prior settings for Data Set 2",
+          escape = F
+)
+
+```
+
+As with Data Set 1, we performed a similar sensitivity analysis. The resulting Bayes factors are displayed in Table \ref{tab:sens-tab2}. Across the range of reasonable prior scales for the mean effect $\nu$ and variability of the $\delta_i$, we see that the positive-effects model $\mathcal{M}_+$ is always preferred over the unconstrained model $\mathcal{M}_u$. At a minimum, the degree of preference for $\mathcal{M}_+$ over $\mathcal{M}_u$ is `r round(BF23$bf.pu, 2)`-to-1 for $r_{\nu}=1/3$ and $r_{\delta}=1/20$. At its maximum, the odds ratio is `r round(BF22$bf.pu, 2)`-to-1, and the other two prior settings result in Bayes factors that are approximately equal to the original. 
+
+
+## Data Set 3
+
+### Aggregate size-congruity effect
+
+```{r agg3, cache=TRUE, message=FALSE}
+dataRaw = data3
+
+collapsed3 = dataRaw %>%
+  filter(correct==1 & response_time > 200 & response_time < 1500) %>%
+  group_by(subject_nr, congruity) %>%
+  summarize(mRT = mean(response_time))
+
+rts3 = with(collapsed3, split(mRT, congruity))
+
+test3 = ttestBF(rts3$incongruent, rts3$congruent, paired=TRUE, nullInterval = c(0,Inf))
+bfAgg3 = exp(test3@bayesFactor$bf[1])
+
+posterior3 = summary(ttestBF(rts3$incongruent, rts3$congruent, paired=TRUE, nullInterval = c(0,Inf), posterior = TRUE, iterations = 1000, progress=FALSE))
+
+```
+
+Subjects in Data Set 3 also exhibited a large aggregate size-congruity effect, with an estimated effect of `r round(posterior3$statistics[1,1], 2)` ms. Mean response times were faster on congruent trials ($M =$ `r round(mean(rts3$congruent))` ms) compared to incongruent trials ($M=$ `r round(mean(rts3$incongruent))` ms), $\text{BF}_{10}=$ `r round(bfAgg3)`, 95% CrI = [`r round(posterior3$quantiles[1,1], 2)` ms, `r round(posterior3$quantiles[1,5], 2)` ms].
+
+### Model estimates
+
+```{r computeBFdata3, cache=TRUE, message=FALSE, warning=FALSE}
+dataRaw = data3
+
+nSub = length(unique(dataRaw$subject_nr))
+
+data = dataRaw %>%
+  filter(correct==1 & response_time > 200 & response_time < 1500) %>%
+  mutate(rt=response_time)
+
+sub = as.factor(data$subject_nr)
+levels(sub)=1:length(unique(sub))
+sub = as.numeric(sub)
+cond = numeric(length(sub))
+
+for (i in 1:length(sub)){
+  if (data$congruity[i]=="congruent"){
+    cond[i] <- 1
+  }
+  else {
+    cond[i] <-2
+  }
+}
+
+prep3 = prep.models(sub,cond)
+BF3 = makeBF(y=data$rt, meanScale=1/6, effectScale=1/10, prep3)
+
+```
+
+
+```{r plotModel3, fig.height=4, fig.width=8, fig.cap="Individual size-congruity effect estimates (left column) and Bayes factor model comparisons (right column) for Data Set 3. Posterior means and 95% credible intervals for $\\delta_i$ are represented by blue dots and gray band, respectively. The + symbols represent the observed size-congruity effect for each subject. The red dashed-line represents the estimated mean size-congruity effect \\(\\nu\\). For the model comparisons, the red box denotes the winning model, and Bayes factors are displayed beside each arrow.", cache=TRUE}
+
+# full model
+sub = as.factor(data$subject_nr)
+levels(sub) = 1:nSub
+
+i.delta0 = prep3$I + 2
+i.delta = (prep3$I + 3):(2*prep3$I + 2)
+keep=1001:10000
+
+fullDelta = BF3$mcmc.full[keep, i.delta] + BF3$mcmc.full[keep, i.delta0]
+
+delta_obs3 = as.vector(unlist(by(data, sub, make.estimates)))
+delta_bayes3 = apply(fullDelta, 2, mean)
+lowerCI = apply(fullDelta, 2, quantile, probs=0.025)
+upperCI = apply(fullDelta, 2, quantile, probs=0.975)
+
+delta = matrix(c(delta_obs3, delta_bayes3, lowerCI, upperCI), nrow=prep3$I, ncol=4)
+
+delta_ordered = delta[order(delta[, 2]),]
+
+# build plots side by side
+par(mfrow = c(1,2), mar=c(3,3,1,1), mgp = c(2.2,1,0))
+
+# plot of model estimates
+plot(x = 1: nrow(delta_ordered),
+     y = delta_ordered[, 2],
+     ylim = c(min(delta_ordered[, 3]), max(delta_ordered[, 4])),
+     col = "gray40",
+     ylab = "Raw effect (ms)",
+     xlab = "Subjects",
+     frame.plot = FALSE,
+     axes = FALSE
+)
+
+# shaded 95% credible intervals
+polyCI(upper=delta_ordered[,4], lower=delta_ordered[,3], col="gainsboro" )
+
+# baseline of null effect
+abline(h = 0, col = "gray60", lwd = 1.5)
+
+axis(side = 1, at = c(1, nSub))
+axis(side = 2)
+
+# observed effects
+points(x = 1:nrow(delta_ordered),
+       y = delta_ordered[,1],
+       col="black",
+       pch=3
+)
+
+# estimated effects
+points(x = 1: nrow(delta_ordered),
+       y = delta_ordered[, 2],
+       pch = 19,
+       col = "blue"
+)
+
+# plot estimated effect parameter from common effect model
+
+singleDelta3 = mean(BF3$mcmc.one[keep, prep3$I+2])
+abline(h=singleDelta3, lwd=2, lty=2, col="red")
+
+
+# plot of Bayes factors
+# compute bayes factors, then fill in below
+# for reporting "big" Bayes factors..compute log and report 10^log below in plot
+b3pu = round(BF3$bf.pu,2)      
+b3u1 = round(BF3$bf.u1,2)#; log10(b2u1)
+b3u0 = round(BF3$bf.u0,2)#; log10(b2u0)
+
+# build vector of Bayes factor labels for plot
+bayesfactors = c(b3pu,
+                 expression(10^{11}),
+                 expression(10^{156})
+                 )
+
+# model names in plot
+names = c(
+  paste("Unconstrained"),
+  paste("Positive-effects"),
+  paste("Common-effect"),
+  paste("Null")
+)
+
+# define colors of plot nodes
+myCol = c("winner" = "red",
+          "regular" = "gray40")
+colors = rep("regular", 4)
+colors[2] = "winner"
+
+
+# define layout of nodes
+pos = matrix(ncol = 2, nrow = length(names))
+pos[,1] = c(0.5, 0.5, 0.25, 0.75)   # x coordinates
+pos[,2] = c(0.5, 0.9, 0.1, 0.1)     # y coordinates
+
+# define edge directions
+connect = matrix(0, nrow = length(names), byrow = F, ncol = length(names))
+connect[1,2] = ''
+connect[3,1] = ''
+connect[4,1] = ''
+
+# define edge colors
+lcol = matrix(0, nrow = length(names), byrow = F, ncol = length(names))
+lcol[1,2] = myCol["regular"]
+lcol[3,1] = myCol["regular"]
+lcol[4,1] = myCol["regular"]
+
+# 
+
+G = plotmat(connect,
+             pos,
+             name = names,
+             curve = 0,
+             box.type="rect",
+             box.size= c(0.25, 0.25, 0.25, 0.1),
+             box.prop= c(0.25, 0.25, 0.25, 0.65),
+             box.lcol = myCol[colors],
+             arr.length = 0.5,
+             arr.lcol = lcol,
+             shadow.size = 1,
+             box.cex = 1.1
+)
+
+x = c(0.59, 0.27, 0.73)
+y = c(0.7, 0.32, 0.32)
+for(i in 1:length(bayesfactors)){
+  text(x = x[i],
+       y = y[i],
+       labels = bayesfactors[i],
+       #labels = techniques[i], # 
+       cex = 1.15,
+       font=2
+  )
+}
+
+```
+
+Individual size-congruity effect estimates from the unconstrained model are displayed in the left column of Figure \ref{fig:plotModel3}. The *observed* size-congruity effects for each subject spanned from `r round(min(delta_obs3),2)` ms to `r round(max(delta_obs3),2)` ms. We see from Figure \ref{fig:plotModel3} that three observed effect estimates were negative, but the rest were constrained to be positive. The hierarchical model estimates for $\delta_i$ also followed a similar pattern to Data Sets 1 and 2 and exhibited similar shrinkage. The estimated effects again extended over a smaller range (`r round(min(delta_bayes3),2)` ms to `r round(max(delta_bayes3),2)` ms) than the observed effects (`r round(min(delta_obs3),2)` ms to `r round(max(delta_obs3),2)` ms). Finally, the posterior estimated mean size-congruity effect was $\nu=$ `r round(singleDelta3)` ms.
+
+### Model comparison and sensitivity analysis
+
+Though we did observe three negative size-congruity effects, the model-estimated effects were all positive. This positive constraint on the $\delta_i$ was confirmed in our model comparison (see right column of Figure \ref{fig:plotModel3}). The observed data were `r b3pu` times more likely under the positive-effects model $\mathcal{M}_+$ than under the unconstrained model $\mathcal{M}_u$. Assuming 1-to-1 prior odds for $\mathcal{M}_+$ and $\mathcal{M}_u$, the observed data increased the posterior odds in favor of $\mathcal{M}_+$ to `r b3pu`-to-1, which is equivalent to a posterior probability of $p(\mathcal{M}_+ \mid \text{data})=$ `r round(b3pu/(1+b3pu), 3)`. As with both Data Sets 1 and 2, the positive-effects and unconstrained models were far preferred to either the common-effect or null models. In all, Data Set 3 provided even more positive evidence for *quantitative* individual differences in the size-congruity effect. 
+
+
+```{r sensitivity3, cache=TRUE, message=FALSE, warning=FALSE}
+
+BF31 = makeBF(y=data$rt, meanScale=1/12, effectScale=1/20, prep3)
+BF32 = makeBF(y=data$rt, meanScale=1/12, effectScale=1/5, prep3)
+BF33 = makeBF(y=data$rt, meanScale=1/3, effectScale=1/20, prep3)
+BF34 = makeBF(y=data$rt, meanScale=1/3, effectScale=1/5, prep3)
+
+```
+
+```{r sens-tab3, cache=TRUE}
+
+scales.nu = c("$\\frac{1}{6}$ (50 ms)",
+             "$\\frac{1}{12}$ (25 ms)", 
+             "$\\frac{1}{12}$ (25 ms)",
+             "$\\frac{1}{3}$ (100 ms)", 
+             "$\\frac{1}{3}$ (100 ms)")
+
+scales.delta = c("$\\frac{1}{10}$ (30 ms)",
+                 "$\\frac{1}{20}$ (15 ms)",
+                 "$\\frac{1}{5}$ (60 ms)",
+                 "$\\frac{1}{20}$ (15 ms)",
+                 "$\\frac{1}{5}$ (60 ms)")
+
+# #use this first to see scientific notation, then fix up in the data frame
+# BFs.3 = data.frame("scales.nu" = scales.nu,
+#                   "scales.delta" = scales.delta,
+#                   "Null" = c(BF3$bf.0p, BF31$bf.0p, BF32$bf.0p, BF33$bf.0p, BF34$bf.0p),
+#                   "Common-effect" = c(BF3$bf.1p, BF31$bf.1p, BF32$bf.1p, BF33$bf.1p, BF34$bf.1p),
+#                   "Positive-effects" = rep("*", 5),
+#                   "Unconstrained" = c(BF3$bf.up, BF31$bf.up, BF32$bf.up, BF33$bf.up, BF34$bf.up)
+#                   )
+# BFs.3
+
+BFs.2 = data.frame("scales.nu" = scales.nu,
+                 "scales.delta" = scales.delta,
+                 "Null" = c(paste0(round(BF3$bf.0p * 10^(40), 2), "e $-40$"),
+                            paste0(round(BF31$bf.0p * 10^(40), 2), "e $-40$"),
+                            paste0(round(BF32$bf.0p * 10^(41), 2), "e $-41$"),
+                            paste0(round(BF33$bf.0p * 10^(40), 2), "e $-40$"),
+                            paste0(round(BF34$bf.0p * 10^(40), 2), "e $-40$")),
+                 "Common-effect" = c(paste0(round(BF3$bf.1p * 10^(4), 2), "e $-4$"),
+                                     paste0(round(BF31$bf.1p * 10^(4), 2), "e $-4$"),
+                                     paste0(round(BF32$bf.1p * 10^(5), 2), "e $-5$"),
+                                     paste0(round(BF33$bf.1p * 10^(3), 2), "e $-3$"),
+                                     paste0(round(BF34$bf.1p * 10^(4), 2), "e $-4$")),
+                 "Positive-effects" = rep("*", 5),
+                 "Unconstrained" = round(c(BF3$bf.up, BF31$bf.up, BF32$bf.up, BF33$bf.up, BF34$bf.up), 2))
+
+
+colnames(BFs.2) = c("Scale on $\\nu$", "Scale on $\\delta_i$", "Null", "Common-effect", "Positive-effects","Unconstrained")
+apa_table(BFs.2,
+          align = c("l", "l", "c", "c", "c", "c"),
+          note = "The first row contains the Bayes factors from the original prior settings. The asterisks mark the preferred model for each prior setting, and Bayes factors are computed against this model.",
+          caption = "Sensitivity of Bayes factors to prior settings for Data Set 3",
+          escape = F
+)
+
+```
+
+Finally, we performed the same sensitivity analysis we did with Data Sets 1 and 2. The resulting Bayes factors are displayed in Table \ref{tab:sens-tab3}. Across the range of reasonable prior scales, we see that the positive-effects model $\mathcal{M}_+$ is always preferred over the unconstrained model $\mathcal{M}_u$. At a minimum, the degree of preference for $\mathcal{M}_+$ over $\mathcal{M}_u$ is `r round(BF33$bf.pu, 2)`-to-1 for $r_{\nu}=1/3$ and $r_{\delta}=1/20$. At its maximum, the Bayes factor is `r round(BF32$bf.pu, 2)`-to-1, and the other two prior settings result in Bayes factors that are approximately equal to the original. 
+
+# Discussion
+
+The purpose of the present study was to uncover the latent structure of individual differences in the numerical size-congruity effect. We did this by applying the techniques of @haaf2017 to build a hierarchical Bayesian model of response times in a physical comparison task. We built four competing models which differed in the amount of constraint that was placed on the population-level size-congruity effect: (1) an unconstrained model, where the size-congruity effect was allowed to be any magnitude, either positive or negative (i.e., qualitative individual differences); (2) a positive-effects model, where the size-congruity effect was constrained to be positive (i.e., quantitative individual differences); (3) a common-effect model, where the size-congruity effect was assumed to be the same value for all individuals; and (4) a null model, which assumed that all variability in response times was reflective purely of sampling noise. We used Bayesian model comparison to adjudicate the four models against three different data sets. Across all three data sets, the *positive-effects* model was the best predictor of the observed data. This model constrains the population-level size-congruity effect to be positive. This lends support to a "quantitative individual differences" model, where everyone exhibits a positive size-congruity effect.
+
+Such results may seem counterintuitive; after all, in all three data sets, we indeed observed negative size-congruity effects in a small number of subjects. Shouldn't this serve as a counterexample to any claims of positive constraint on the size-congruity effect? We argue that it does not. Indeed, as explained above, any observed size-congruity effects consist also of sampling noise inherent in their measurements, so simply relying on the mean difference between congruent and incongruent trials is going to exaggerate the range of true effects. By building in this sampling noise as part of the hierarchical model specification, we effectively "subtract out" this noise from our model-estimated true effects. This shrinkage, or regularization, is a natural consequence of hierarchical modeling. After accounting for this sampling noise in our data sets, all subjects' model-estimated size-congruity effects were positive.
+
+So why does this matter? We think our work adds value in two primary ways. The first is the practical application of our methods to measure the size-congruity effect. Researchers in numerical cognition often use the size-congruity effect as a marker of automatic processing of number magnitude. The nature of the effect is such that its mere existence indicates that people cannot ignore the numerical value of presented number symbols -- otherwise, there would be no reason for people to slow down when physical size and numerical magnitude were incongruent. @girelli2000 found that automaticity of number magnitude representation (as indexed by the size-congruity effect) emerges gradually as numerical skills progress. Similarly, @rubinsten2002 showed that the size-congruity effect (and thus automaticity of number magnitude representation) appears later than other markers of numerical representations [e.g., the numerical distance effect, @moyer1967]. @mussolin2010 demonstrated that children with developmental dyscalculia exhibit a reduced size-congruity effect compared to non-dyscalculic controls. All of these studies have a common need to measure the size-congruity effect in individuals. As discussed earlier, typical measurements of the size-congruity effect (e.g., difference in mean response times) are embedded with measurement error in the form of sampling noise. The hierarchical Bayesian model of @haaf2017 that we applied is well-suited to estimating these effects while removing this sampling noise. To our knowledge, this method has not previously been applied in any numerical cognition contexts.
+
+The second way in which our work adds value is more theoretical. In much of our earlier work, we have sought to uncover the mechanisms that are responsible for the size-congruity effect. To date, there has been much conflicting evidence concerning the locus of this interference. @santens2011 proposed that the size congruity effect stems from either early representational overlap (an *early interaction account*) or a *late interaction* account reflecting response competition. A variety of different techniques have been used to test between these competing accounts, including electrophysiological techniques [@schwarzHeinze1998;@szucs2007;@szucs2008], neuroimaging [@cohenKadosh2007], computer mouse tracking [@faulkenberryShaki2016], visual search [@sobel2016;@sobel2017;@krause2016], and mathematical modeling [@faulkenberry2018wald;@bowman2020]. However, consistent conclusions have remained elusive; some studies support the early interaction account, whereas others support the late interaction account. 
+
+We think the present work may help to provide some much-needed insight into this debate. Indeed, our finding that "everyone exhibits the size-congruity effect" means that the effect is not malleable and is resistant to strategic control. On one hand, this might be taken as support for early interaction, as it seems to imply that representations of physical size and numerical magnitude are inseparable. On the other hand, recent mathematical modeling work [@faulkenberry2018wald;@bowman2020] has indicated that the size-congruity effect occurs in the decision components of the elapsed response and not in the nondecision components (i.e., initial representation formation). As such, the positive constraint on the effect would implicate an obligatory response competition for all individuals, supporting a late interaction account. We honestly do not know at this point, and we think this will be an exciting technique for future developments on the architecture of the size-congruity effect.
+
+One thing that we did not consider for this study is the possibility that "some do, some don't" [e.g., @haaf2018]. Here, we would need to consider another model on top of the four proposed models in this paper -- namely, a model where some have a positive effect, yet others have a null effect. This is called a *spike-and-slab* mixture model, and @haaf2018 found that it was the most predictive model for the location Stroop effect [@pratte2010]. It could be the case that a spike-and-slab model might be useful for modeling the size-congruity effect, especially given past work that some subjects with developmental dyscalculia do not seem to exhibit a size-congruity effect [e.g., @rubinsten2002].
+
+Another potential limitation concerns the model assumption that response times are normally distributed. It is well known that response time distributions are positively skewed rather than symmetric [@luce1986]. Certainly one possibility for us to consider would be using a skewed distribution at the first level of the model -- for example, a lognormal model [@rouder2014] or a shifted Wald model [@anders2016;@faulkenberry2017]. However, @haaf2018 addressed this previously, arguing that the normal model provides computational convenience. It is not yet clear what the added benefit would be for modeling the response times with a non-normal distribution.
+
+Overall, we argue that the size-congruity effect is something that everyone exhibits (at least in the context of a physical comparison task). The methods we employed and results are immediately useful in two main ways: (1) the methods provide a way for researchers to compute better, noise-free estimates of individual size-congruity effects (and more broadly, any type of interference effect in numerical cognition); and (2) the positive-effects model of the latent structure the size-congruity effect contrains future theory building about the size-congruity effect, which can possibly lead to new insights about the architecture of numerical cognition.
+
+\newpage
+
+# References
+
+\setlength{\parindent}{-0.5in}
+\setlength{\leftskip}{0.5in}
+
