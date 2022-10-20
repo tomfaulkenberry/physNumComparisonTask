@@ -1,0 +1,230 @@
+% BLED.STY  - Metodolo"ska sre"canja
+% Vladimir Batagelj, July 15 1993
+% ------------------------------------------------------------------------
+% verzija 0.1: 14. 7.93   zdru"zitev VEGA+A4+A4WIDE.STY
+%                         popravki maketitle, heading
+% ------------------------------------------------------------------------
+% VEGA.sty  - prilagoditev zvrsti lokalnim meram in domaci dodatki
+% Vladimir Batagelj
+%
+% verzija 0.6: 28-Oct-90  LamSTeX
+%
+% -----------------------------------------------------------------------
+% "a4" document style option.
+% John Pavel, May 1987
+%
+% Redefines the \textheight and \topmargin for A4 paper, as opposed to US
+% paper. \textwidth is not altered because A4 is narrower than US paper.
+%
+% \textheight is the height of text (including footnotes and figures,
+% excluding running head and foot).
+%
+% Adjusting \textheight will adjust position of the bottom of the page.
+% Must preserve "(\textheight - \topskip) divides \baselineskip".
+% \topskip always appears to be 10pt.
+%
+% Following Lamport's change to other style files on 24 Jun 86,
+% changed to explicitly compute \textheight to avoid roundoff.  The
+% value of the multiplier was calculated as the floor of the old
+% \textheight minus \topskip, divided by \baselineskip for
+% \normalsize.
+% --------------------------------------------------------------------------
+% "moretext" document style option.
+% Jean-Francois Lamy, July 86
+%
+% Redefines the margins so that they are more in line with
+% what we are used to see.
+% --------------------------------------------------------------------------
+
+% \ifundefined{bled}
+ \expandafter\ifx\csname bled\endcsname\relax \def\bled{bled}
+% \then go ahead \else do nothing
+ \else \endinput \fi
+
+\typeout{Document Style Option 'Bled' ver 0.1. / 15-Jul-93 / V.B.}
+
+% --------- redefine maketitle -------------------------------------
+
+\def\maketitle{\par
+ \begingroup
+% \def\thefootnote{\fnsymbol{footnote}}
+ \def\@makefnmark{\hbox to 0pt{$^{\@thefnmark}$\hss}}
+ \if@twocolumn \twocolumn[\@maketitle]
+ \else \newpage \global\@topnum\z@ \@maketitle \fi
+% \thispagestyle{myheadings} \markright{}
+ \thispagestyle{empty}
+ \@thanks
+ \endgroup
+ \setcounter{footnote}{0}
+ \let\maketitle\relax
+ \let\@maketitle\relax
+ \gdef\@thanks{}\gdef\@author{}\gdef\@title{}\let\thanks\relax}
+\def\@maketitle{\newpage
+ \null \noindent
+ \vskip -10mm
+\noindent
+ \raisebox{30pt}[0pt][0pt]{
+ \parbox[b]{100mm}{\small Metodolo\v{s}ki zvezki, Vol. X, No. X, 20XX, xxx-xxx}}
+ \normalsize
+ \vskip 2em
+ \begin{center}
+  {\LARGE \@title \par} \vskip 1.5em {\large \lineskip .5em
+  \begin{tabular}[t]{c}\@author \end{tabular}\par}
+  \vskip 1em {\large \@date}
+ \end{center}
+ \par \vskip 1.5em}
+
+% --------- redefine headings ---------------------------------------
+
+\if@twoside \def\ps@headings{\let\@mkboth\markboth
+ \def\@oddfoot{}
+ \def\@evenfoot{}
+ \def\@evenhead{\rm \thepage\hfil \sl\leftmark}
+ \def\@oddhead{\hbox{}\sl \rightmark \hfil\rm\thepage}
+ \def\sectionmark##1{\markboth {%
+  \uppercase{\ifnum \c@secnumdepth >\z@
+   \thesection\hskip 1em\relax \fi ##1}}{}}
+  \def\subsectionmark##1{\markright
+   {\ifnum \c@secnumdepth >\@ne
+    \thesubsection\hskip 1em\relax \fi ##1}}}
+\else \def\ps@headings{\let\@mkboth\markboth
+  \def\@oddfoot{}
+  \def\@evenfoot{}
+  \def\@oddhead{\hbox {}\sl \rightmark \hfil\rm\thepage}
+  \def\sectionmark##1{\markright {%
+   \uppercase{\ifnum \c@secnumdepth >\z@
+    \thesection\hskip 1em\relax \fi ##1}}}}
+\fi
+\def\ps@myheadings{\let\@mkboth\@gobbletwo
+ \def\@oddhead{\vbox to12pt{\vss\hbox to\hsize
+  {\sl\rightmark \hfil \rm\thepage}\vskip4pt\hrule}}
+ \def\@oddfoot{}
+ \def\@evenhead{\vbox to12pt{\vss\hbox to\hsize
+  {\rm \thepage\hfil\sl\leftmark\hbox{}}\vskip4pt\hrule}}
+ \def\@evenfoot{}\def\sectionmark##1{}\def\subsectionmark##1{}}
+
+%---------------- a4
+
+\topmargin 0 pt     %    Nominal distance from top of paper to top of page
+\ifcase \@ptsize
+    % mods for 10 pt
+    \textheight 53\baselineskip
+\or % mods for 11 pt
+    \textheight 46\baselineskip
+\or % mods for 12 pt
+%   \textheight 42\baselineskip
+    \textheight 45\baselineskip
+\fi
+\advance\textheight by \topskip
+
+% ---------------- vega
+
+\hoffset = 5mm
+\marginparsep 10pt \topmargin 0 true mm \headheight 12pt \headsep 25pt
+%\footheight 12pt 
+\footskip 30pt
+
+%----------------- a4wide
+
+\ifcase \@ptsize
+    % mods for 10 pt
+    \oddsidemargin  0.15 in     %   Left margin on odd-numbered pages.
+    \evensidemargin 0.35 in     %   Left margin on even-numbered pages.
+    \marginparwidth 1 in        %   Width of marginal notes.
+    \oddsidemargin 0.25 in      %   Note that \oddsidemargin = \evensidemargin
+    \evensidemargin 0.25 in
+    \marginparwidth 0.75 in
+    \textwidth 5.875 in         % Width of text line.
+\or % mods for 11 pt
+    \oddsidemargin 0.1 in      %   Left margin on odd-numbered pages.
+    \evensidemargin 0.15 in    %   Left margin on even-numbered pages.
+    \marginparwidth 1 in       %   Width of marginal notes.
+    \oddsidemargin 0.125 in    %   Note that \oddsidemargin = \evensidemargin
+    \evensidemargin 0.125 in
+    \marginparwidth 0.75 in
+    \textwidth 6.125 in % Width of text line.
+\or % mods for 12 pt
+    \oddsidemargin -10 pt      %   Left margin on odd-numbered pages.
+    \evensidemargin 10 pt      %   Left margin on even-numbered pages.
+    \marginparwidth 1 in       %   Width of marginal notes.
+    \oddsidemargin 0 in        %   Note that \oddsidemargin = \evensidemargin
+    \evensidemargin 0 in
+    \marginparwidth 0.75 in
+%   \textwidth 6.375 true in   % Width of text line.
+    \textwidth 150 true mm     % Width of text line.
+\fi
+
+% ---------------------  VEGA.STY -------------------------------------
+
+ \def\tg{\mathop{\rm tg}\nolimits}
+ \def\ctg{\mathop{\rm ctg}\nolimits}
+ \def\sh{\mathop{\rm sh}\nolimits}
+ \def\ch{\mathop{\rm ch}\nolimits}
+ \def\th{\mathop{\rm th}\nolimits}
+ \def\cth{\mathop{\rm cth}\nolimits}
+ \def\arc{\mathop{\rm arc}\nolimits}
+ \def\Arc{\mathop{\rm Arc}\nolimits}
+
+ \def\Grad{\mathop{\rm grad}\nolimits}
+ \def\Div{\mathop{\rm div}\nolimits}
+ \def\Rot{\mathop{\rm rot}\nolimits}
+
+ \def\var{\mathop{\rm var}\nolimits}
+ \def\cov{\mathop{\rm cov}\nolimits}
+ \def\sign{\mathop{\rm sign}\nolimits}
+
+ \def\Min{\mathop{\rm Min}\nolimits}
+ \def\Max{\mathop{\rm Max}\nolimits}
+ \def\card{\mathop{\rm card}\nolimits}
+ \def\ord{\mathop{\rm ord}\nolimits}
+ \def\Cn{\mathop{\rm Cn}\nolimits}
+ \def\cn{\mathop{\rm cn}\nolimits}
+
+ \mathchardef\hyphen="002D
+
+ \newcommand{\Qed}{\rule{2.5mm}{3mm}}
+
+ \def\NN{\hbox{\sf I\kern-.13em\hbox{N}}}
+ \def\RR{\hbox{\sf I\kern-.14em\hbox{R}}}
+ \def\ZZ{{\hbox{\sf Z\kern-.43emZ}}}
+ \def\CC{\hbox{\sf C\kern -.48emC}}
+ \def\QQ{\hbox{\sf C\kern -.48emQ}}
+ \def\Cc{\hbox{\sf C\kern -.47em {\raise .48ex \hbox{$\scriptscriptstyle |$}}
+   \kern-.5em {\raise .48ex \hbox{$\scriptscriptstyle |$}} }}
+ \def\Qq{\hbox{\sf Q\kern -.57em {\raise .48ex \hbox{$\scriptscriptstyle |$}}
+   \kern-.55em {\raise .48ex \hbox{$\scriptscriptstyle |$}} }}
+
+\endinput
+
+% *************** VEGA.STY ********************************************
+
+\if@twoside \oddsidemargin 5pt \evensidemargin 5pt \marginparwidth 20pt
+ \else \oddsidemargin 5pt \evensidemargin 5pt \marginparwidth 20pt \fi
+
+
+\textheight 23 true cm \textwidth 16 true cm
+\columnsep 10pt \columnseprule 0pt
+
+% Here are the the PiCTeX logo, and the syllable PiC:
+
+ \def\PiC{P\kern-.12em\lower.5ex\hbox{I}\kern-.075emC}
+ \def\PiCTeX{\PiC\kern-.11em\TeX}
+
+% Here are the AmSTeX and LamSTeX logo, and the syllable AmS:
+
+ \def\AmS{${\cal A}\kern-.1667em\lower.5ex
+          \hbox{${\cal M}$}\kern-.125em{\cal S}$}
+
+ \def\AmSTeX{\AmS-\TeX}
+
+ \def\LamSTeX{L\kern-.4em\raise.3ex\hbox{\small$\cal A$}\kern-.25em
+ \lower.4ex\hbox{$\cal M$}\kern-.1em{$\cal S$}-\TeX}
+
+% Here is the the BibTeX logo
+
+\newcommand{\BibTeX}{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em\TeX}}
+
+% Here is the the SLiTeX logo
+
+\newcommand{\SLiTeX}{{\rm S\kern-.06em{\sc l\kern-.035emi}\kern-.06em\TeX}}
+
