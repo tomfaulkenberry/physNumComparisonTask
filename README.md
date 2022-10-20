@@ -6,4 +6,6 @@ This repository contains the experiment files, data, and manuscript files for th
 
 2. "Bayesian modeling of the latent structure of individual differences in the numerical size-congruity effect" (with K. Bowman) - To appear in *Journal of Cognitive Psychology*  https://psyarxiv.com/4b9rs/
 
+3. "A note on the normality assumption for Bayesian models of constraint in behavioral individual differences" -- https://arxiv.org/abs/2112.05503
+
 The contents of this repository are licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) license.
